@@ -56,7 +56,7 @@ export function topicStats(rows: Row[], topics: string[]): TopicStat[] {
  * Effect = mean residual of classes using the textbook, 95% CI = mean ± t(k−1)·sd/√k.
  * adjusted=false when baselines do not vary (e.g. import without baseline): no better/worse verdicts then.
  */
-export type Verdict = "better" | "worse" | "same" | "few" | "noadj";
+export type Verdict = "better" | "worse" | "same" | "few" | "noadj" | "local";
 export type Effect = { textbook: string; topic: string | null; effect: number; lo: number; hi: number; k: number; verdict: Verdict };
 
 export function fairModel(cts: ClassTopic[]) {
@@ -84,7 +84,13 @@ export function fairModel(cts: ClassTopic[]) {
 function effectOf(textbook: string, topic: string | null, vals: number[], adjusted: boolean): Effect {
   const k = vals.length, m = mean(vals), half = k > 1 ? (t95(k - 1) * sd(vals)) / Math.sqrt(k) : Infinity;
   const lo = m - half, hi = m + half;
-  const verdict: Verdict = k < 3 ? "few" : !adjusted ? "noadj" : lo > 0 && m >= MIN_EFFECT ? "better" : hi < 0 && m <= -MIN_EFFECT ? "worse" : "same";
+  let verdict: Verdict = k < 3 ? "few" : !adjusted ? "noadj" : lo > 0 && m >= MIN_EFFECT ? "better" : hi < 0 && m <= -MIN_EFFECT ? "worse" : "same";
+  // a textbook is blamed only if the gap survives dropping its 2 weakest classes; otherwise 1–2 classes drive it
+  if (verdict === "worse") {
+    const rest = [...vals].sort((a, b) => a - b).slice(2);
+    const k2 = rest.length, m2 = mean(rest), h2 = k2 > 1 ? (t95(k2 - 1) * sd(rest)) / Math.sqrt(k2) : Infinity;
+    if (k2 < 3 || !(m2 + h2 < 0 && m2 <= -MIN_EFFECT)) verdict = "local";
+  }
   return { textbook, topic, effect: r1(m), lo: r1(lo), hi: r1(hi), k, verdict };
 }
 
@@ -115,7 +121,7 @@ export function hourRecs(stats: TopicStat[], hours: Record<string, number>, cell
     const plan = hours[s.topic] ?? 6;
     const topicCells = cells.filter((c) => c.topic === s.topic);
     const worst = topicCells.filter((c) => c.verdict === "worse").sort((x, y) => x.effect - y.effect)[0];
-    const bookChecked = topicCells.some((c) => c.verdict === "better" || c.verdict === "worse" || c.verdict === "same");
+    const bookChecked = topicCells.some((c) => c.verdict === "better" || c.verdict === "worse" || c.verdict === "same" || c.verdict === "local");
     const gap = TARGET - s.mean;
     let cause: HourRec["cause"] = "ok";
     let want = 0;

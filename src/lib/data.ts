@@ -38,7 +38,8 @@ export const COVERAGE: Record<string, number[]> = {
 
 // Topic base difficulty (expected mean for an average class) and textbook-specific chapter effects.
 const BASE = [74, 78, 68, 57, 55, 52, 61, 80, 64, 76];
-const BOOK_EFFECT: Record<string, number[]> = {
+// DEMO TRUTH: effects injected into the generator; the honesty check compares the method against them
+export const BOOK_EFFECT: Record<string, number[]> = {
   "Учебник А (демо)": [0, 0, 1, 0, 1, 0, -1, 0, 0, 1],
   "Учебник Б (демо)": [0, 1, 0, -9, -2, -1, 3, 0, 1, -3],
   "Учебник В (демо)": [1, 0, 0, 1, 0, 1, 0, 0, -10, 2],
@@ -120,6 +121,10 @@ export function generateDemo(): { rows: Row[]; responses: Response[] } {
       }
     }
   }
+  // DEMO: one class with a purely local problem on "Линейная функция" (teacher change), its textbook is fine elsewhere.
+  // Added after generation so no random draw moves; the "where is the cause" card must blame the class, not the book.
+  const local = rows.find((r) => r.school.startsWith("Школа №22,"));
+  if (local) for (const r of rows) if (r.school === local.school && r.cls === local.cls && r.topic === TOPICS[6].name) r.score = Math.max(0, r.score - 16);
   return { rows, responses };
 }
 

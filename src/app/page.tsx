@@ -4,7 +4,8 @@ import * as XLSX from "xlsx";
 import { BOOKS, COVERAGE, DISTRICTS, generateDemo, generatePrevYear, ITEMS, ITEM_TOPIC, TOPICS, type Response, type Row } from "@/lib/data";
 import { classTopics, hourRecs, PASS, TARGET, textbookEffects, topicStats } from "@/lib/analytics";
 import { deviationByUnit, earlyWarnings, itemAnalysis, quarterDynamics } from "@/lib/diagnostics";
-import { differenceInDifferences, procurement, publisherIssues, remedialWeek, schoolTopicMeans } from "@/lib/wow";
+import { differenceInDifferences, publisherIssues, remedialWeek, schoolTopicMeans } from "@/lib/wow";
+import { truthCheck, whereIsCause } from "@/lib/cause";
 import { T, type Lang } from "@/lib/i18n";
 import { parseImport, type Quality } from "@/lib/importer";
 
@@ -35,7 +36,7 @@ export default function Home() {
   const [notified, setNotified] = useState<string[]>([]);
   const [mapTopic, setMapTopic] = useState("");
   const [openAction, setOpenAction] = useState("");
-  const [simDistrict, setSimDistrict] = useState("");
+  const [showTruth, setShowTruth] = useState(false);
   const t = T[lang];
   const show = (i: number) => tab === i || all;
   const label = (topic: string) => (lang === "kk" ? TOPIC_BY_NAME[topic]?.kk : lang === "en" ? TOPIC_BY_NAME[topic]?.en : undefined) || topic;
@@ -68,7 +69,7 @@ export default function Home() {
     const rs = rows.filter((r) => inScope(r, r.district));
     const schoolSet = new Set(rs.map((r) => r.school));
     const resp = responses.filter((r) => schoolSet.has(r.school));
-    return { rs, resp };
+    return { rs, resp, cts: classTopics(rs) };
   }, [rows, responses, role, scope]);
 
   const allCts = useMemo(() => classTopics(rows), [rows]);
@@ -112,10 +113,8 @@ export default function Home() {
     const issues = publisherIssues(eff.cells);
     return { eff, did, distMean, issues };
   }, [rows, allCts, isDemo, mapTopic]);
-  const simD = simDistrict || districts[0] || "";
-  const simStudents = Math.round(rows.filter((r) => r.district === simD).length / Math.max(1, new Set(rows.map((r) => r.topic)).size));
-  const money = procurement(w.eff.overall, simStudents);
-  const fmtT = (n: number) => n.toLocaleString("ru-RU");
+  const causes = a.stats.map((st) => whereIsCause(view.cts, a.eff.cells, st.topic, st.mean));
+  const truth = isDemo && showTruth ? truthCheck(allCts, w.eff.cells) : null;
 
   const sorted = [...a.stats].sort((x, y) => x.mean - y.mean);
   const naiveBest = [...a.eff.overall].sort((x, y) => y.naive - x.naive)[0];
@@ -174,12 +173,11 @@ export default function Home() {
     const books = w.eff.overall.map((e) => `<tr><td>${esc(e.textbook)}</td><td>${e.naive}%</td><td>${fmt(e.effect)} [${fmt(e.lo)}; ${fmt(e.hi)}]</td><td>${esc(t.v[e.verdict])}</td></tr>`).join("");
     const did = w.did.filter((d) => d.significant).slice(0, 3).map((d) => `<li>${esc(label(d.topic))}: ${fmt(d.did)} п.п. [${fmt(d.lo)}; ${fmt(d.hi)}]</li>`).join("");
     const hrs = a.recs.filter((r) => r.delta !== 0).map((r) => `<li>${esc(label(r.topic))}: ${r.plan} → ${r.rec} ч</li>`).join("");
-    const v = money.find((m) => m.textbook === "Учебник В (демо)");
     const body = lang === "kk"
-      ? `<p style="text-align:right">Білім басқармасының басшысына (демо)</p><h2 style="text-align:center">${t.memoTitle}</h2><p>Тақырып: 7-сыныптың алгебра оқулықтарын таңдау және сағаттарды бөлу. Күні: ${today}.</p><p>Тестілеу деректері (${rows.length} нәтиже) Oqulyq Lab-та талданды. Оқулықтарды әділ салыстыру (сыныптың бастапқы деңгейін ескере отырып):</p><table border="1" cellpadding="4" style="border-collapse:collapse"><tr><th>Оқулық</th><th>Орташа</th><th>Әділ әсер, п.п.</th><th>Қорытынды</th></tr>${books}</table>${did ? `<p>Табиғи эксперимент (Б → В ауысқан мектептер):</p><ul>${did}</ul>` : ""}${v ? `<p>${esc(t.moneyVerdict(v.textbook, fmtT(v.extraCost)))} (${esc(simD)}).</p>` : ""}<p><b>Ұсыныс:</b> оқулықты орташа балл бойынша ауыстырмау; әлсіз тарауларды қосымша материалмен толықтыру; сағаттарды қайта бөлу:</p><ul>${hrs}</ul><p>Деректер — демо. Әдістеме: docs/method.md.</p><p>Әдіскер ____________</p>`
+      ? `<p style="text-align:right">Білім басқармасының басшысына (демо)</p><h2 style="text-align:center">${t.memoTitle}</h2><p>Тақырып: 7-сыныптың алгебра оқулықтарын таңдау және сағаттарды бөлу. Күні: ${today}.</p><p>Тестілеу деректері (${rows.length} нәтиже) Oqulyq Lab-та талданды. Оқулықтарды әділ салыстыру (сыныптың бастапқы деңгейін ескере отырып):</p><table border="1" cellpadding="4" style="border-collapse:collapse"><tr><th>Оқулық</th><th>Орташа</th><th>Әділ әсер, п.п.</th><th>Қорытынды</th></tr>${books}</table>${did ? `<p>Табиғи эксперимент (Б → В ауысқан мектептер):</p><ul>${did}</ul>` : ""}<p><b>Ұсыныс:</b> оқулықты орташа балл бойынша ауыстырмау; әлсіз тарауларды қосымша материалмен толықтыру; сағаттарды қайта бөлу:</p><ul>${hrs}</ul><p>Деректер — демо. Әдістеме: docs/method.md.</p><p>Әдіскер ____________</p>`
       : lang === "en"
-      ? `<p style="text-align:right">To the head of the education department (demo)</p><h2 style="text-align:center">${t.memoTitle}</h2><p>Subject: choice of grade-7 algebra textbooks and allocation of hours. Date: ${today}.</p><p>Test data (${rows.length} results) were analysed in Oqulyq Lab. Fair textbook comparison (adjusted for class entry level):</p><table border="1" cellpadding="4" style="border-collapse:collapse"><tr><th>Textbook</th><th>Mean</th><th>Fair effect, p.p.</th><th>Verdict</th></tr>${books}</table>${did ? `<p>Natural experiment (schools that switched Б → В):</p><ul>${did}</ul>` : ""}${v ? `<p>${esc(t.moneyVerdict(v.textbook, fmtT(v.extraCost)))} (${esc(simD)}).</p>` : ""}<p><b>Recommendation:</b> do not switch textbooks based on mean scores; supplement weak chapters; reallocate hours:</p><ul>${hrs}</ul><p>Demo data. Method: docs/method.md.</p><p>Methodologist ____________</p>`
-      : `<p style="text-align:right">Руководителю управления образования (демо)</p><h2 style="text-align:center">${t.memoTitle}</h2><p>О выборе учебников алгебры для 7 класса и распределении учебных часов. Дата: ${today}.</p><p>Результаты тестирования (${rows.length} результатов) проанализированы в Oqulyq Lab. Честное сравнение учебников (с учётом уровня класса на входе):</p><table border="1" cellpadding="4" style="border-collapse:collapse"><tr><th>Учебник</th><th>Средний балл</th><th>Честный эффект, п.п. (95% ДИ)</th><th>Вывод</th></tr>${books}</table>${did ? `<p>Естественный эксперимент (школы, сменившие учебник Б на В):</p><ul>${did}</ul>` : ""}${v ? `<p>${esc(t.moneyVerdict(v.textbook, fmtT(v.extraCost)))} (${esc(simD)}).</p>` : ""}<p><b>Рекомендация:</b> не менять учебник по среднему баллу; закупать самый доступный учебник, если доказанной разницы нет; дополнить слабые главы материалами; перераспределить часы в пределах годового объёма:</p><ul>${hrs}</ul><p>Данные демонстрационные. Методика: docs/method.md.</p><p>Методист ____________</p>`;
+      ? `<p style="text-align:right">To the head of the education department (demo)</p><h2 style="text-align:center">${t.memoTitle}</h2><p>Subject: choice of grade-7 algebra textbooks and allocation of hours. Date: ${today}.</p><p>Test data (${rows.length} results) were analysed in Oqulyq Lab. Fair textbook comparison (adjusted for class entry level):</p><table border="1" cellpadding="4" style="border-collapse:collapse"><tr><th>Textbook</th><th>Mean</th><th>Fair effect, p.p.</th><th>Verdict</th></tr>${books}</table>${did ? `<p>Natural experiment (schools that switched Б → В):</p><ul>${did}</ul>` : ""}<p><b>Recommendation:</b> do not switch textbooks based on mean scores; supplement weak chapters; reallocate hours:</p><ul>${hrs}</ul><p>Demo data. Method: docs/method.md.</p><p>Methodologist ____________</p>`
+      : `<p style="text-align:right">Руководителю управления образования (демо)</p><h2 style="text-align:center">${t.memoTitle}</h2><p>О выборе учебников алгебры для 7 класса и распределении учебных часов. Дата: ${today}.</p><p>Результаты тестирования (${rows.length} результатов) проанализированы в Oqulyq Lab. Честное сравнение учебников (с учётом уровня класса на входе):</p><table border="1" cellpadding="4" style="border-collapse:collapse"><tr><th>Учебник</th><th>Средний балл</th><th>Честный эффект, п.п. (95% ДИ)</th><th>Вывод</th></tr>${books}</table>${did ? `<p>Естественный эксперимент (школы, сменившие учебник Б на В):</p><ul>${did}</ul>` : ""}<p><b>Рекомендация:</b> не менять учебник по среднему баллу; закупать самый доступный учебник, если доказанной разницы нет; дополнить слабые главы материалами; перераспределить часы в пределах годового объёма:</p><ul>${hrs}</ul><p>Данные демонстрационные. Методика: docs/method.md.</p><p>Методист ____________</p>`;
     saveDoc("oqulyq-zapiska.doc", t.memoTitle, body);
   }
   function downloadPublisher() {
@@ -371,6 +369,34 @@ export default function Home() {
       {show(1) && (
         <section className="mt-4 grid grid-cols-1 gap-10 [&>*]:min-w-0">
           <div>
+            <h2 className="font-display text-2xl">{t.causeTitle}</h2>
+            <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.causeNote}</p>
+            <p className="mt-1 max-w-3xl text-sm"><b>{t.howToRead}:</b> {t.causeHow}</p>
+            <ul className="mt-4 grid gap-3">
+              {causes.filter((c) => c.level !== "none").map((c) => {
+                const text = c.level === "program" ? t.causeText.program : c.level === "textbook" ? t.causeText.textbook(c.textbook!) : c.level === "school" ? t.causeText.school(c.worst!.school) : t.causeText.class(c.worst!.cls, c.worst!.school, c.others!.n, c.worst!.textbook, fmt(c.others!.mean));
+                return (
+                  <li key={c.topic} className="grid gap-2 rounded-md border border-line bg-card p-4 sm:grid-cols-[minmax(0,240px)_1fr] sm:gap-6">
+                    <div>
+                      <div className="font-medium">{label(c.topic)}</div>
+                      <span className={`mt-1 inline-block rounded-sm px-1.5 py-0.5 font-mono text-[11px] ${c.level === "textbook" ? "bg-bad text-paper" : c.level === "program" ? "bg-accent text-paper" : "border border-ink"}`}>{t.levels[c.level]}</span>
+                      <div className="mt-2 flex h-2 w-full overflow-hidden rounded-sm" title={t.causeHow}>
+                        <span className="bg-bad" style={{ width: `${c.shares.textbook}%` }} />
+                        <span className="bg-accent" style={{ width: `${c.shares.school}%` }} />
+                        <span className="bg-ink/30" style={{ width: `${c.shares.class}%` }} />
+                      </div>
+                      <div className="mt-1 font-mono text-[11px] text-muted">{t.shareLabels[0]} {c.shares.textbook}% · {t.shareLabels[1]} {c.shares.school}% · {t.shareLabels[2]} {c.shares.class}%</div>
+                    </div>
+                    <div className="text-[15px] leading-snug">
+                      <p>{text}</p>
+                      {(c.level === "program" || c.level === "textbook") && c.worst && <p className="mt-1 text-sm text-muted">{t.causeText.local(c.worst.cls, c.worst.school, fmt(c.worst.resid))}</p>}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          <div>
             <h2 className="font-display text-2xl">{t.booksTitle}</h2>
             <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.booksNote}</p>
             <div className="mt-4 overflow-x-auto">
@@ -537,38 +563,6 @@ export default function Home() {
               </div>
             )}
           </div>
-          <div>
-            <h2 className="font-display text-2xl">{t.moneyTitle}</h2>
-            <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.moneyNote}</p>
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-muted">{t.district}</span>
-              <select name="sim-district" value={simD} onChange={(e) => setSimDistrict(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1" aria-label={t.district}>
-                {districts.map((d) => <option key={d} value={d}>{distLabel(d)}</option>)}
-              </select>
-              <span className="font-mono">{simStudents} {t.studentsN}</span>
-            </div>
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="border-b border-ink text-muted"><tr>{t.moneyCols.map((c) => <th key={c} className="py-2 pr-3 font-normal">{c}</th>)}</tr></thead>
-                <tbody>
-                  {money.map((m) => (
-                    <tr key={m.textbook} className="border-b border-line">
-                      <td className="py-2 pr-3 font-medium">{m.textbook}</td>
-                      <td className="pr-3 font-mono tabular-nums">{fmtT(m.price)}</td>
-                      <td className="pr-3 font-mono tabular-nums">{fmtT(m.cost)}</td>
-                      <td className="pr-3 font-mono tabular-nums">{m.extraCost ? `+${fmtT(m.extraCost)}` : "—"}</td>
-                      <td className="pr-3 font-mono tabular-nums">{fmt(m.effect)} <span className="text-muted">[{fmt(m.lo)}; {fmt(m.hi)}]</span></td>
-                      <td className="text-[13px]">{m.perPoint != null ? <span className="font-mono">{fmtT(m.perPoint)} ₸</span> : <span className="text-muted">{t.notProven}</span>}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            {(() => {
-              const top = [...money].filter((m) => m.extraCost > 0 && m.perPoint == null).sort((x, y) => y.extraCost - x.extraCost)[0];
-              return top ? <p className="mt-3 max-w-3xl rounded-md border-l-4 border-bad bg-card p-3 text-[15px]">{t.moneyVerdict(top.textbook, fmtT(top.extraCost))}</p> : null;
-            })()}
-          </div>
         </section>
       )}
 
@@ -710,6 +704,34 @@ export default function Home() {
               ))}
             </ol>
             <p className="mt-4 font-mono text-xs text-muted">PASS = {PASS} · TARGET = {TARGET} · CI = 95%</p>
+            {isDemo && (
+              <div className="mt-6 rounded-md border border-ink p-4">
+                <h3 className="font-display text-xl">{t.truthTitle}</h3>
+                <p className="mt-1 text-sm text-muted">{t.truthNote}</p>
+                <button onClick={() => setShowTruth(!showTruth)} aria-expanded={showTruth} className="print:hidden mt-3 rounded-full border border-ink px-4 py-1.5 text-sm hover:bg-ink hover:text-paper">{showTruth ? t.truthHide : t.truthBtn}</button>
+                {truth && (
+                  <>
+                    <p className="mt-3 font-medium">{t.truthSummary(truth.mae, truth.inCI, truth.rows.length)}</p>
+                    <div className="mt-2 max-h-80 overflow-auto">
+                      <table className="w-full text-left text-sm">
+                        <thead className="border-b border-ink text-muted"><tr>{t.truthCols.map((c) => <th key={c} className="py-1 pr-2 font-normal">{c}</th>)}</tr></thead>
+                        <tbody>
+                          {truth.rows.filter((r) => Math.abs(r.truth) >= 2 || Math.abs(r.estimate) >= 3).map((r) => (
+                            <tr key={r.textbook + r.topic} className="border-b border-line">
+                              <td className="py-1 pr-2">{r.textbook.replace(" (демо)", "")}</td>
+                              <td className="pr-2">{label(r.topic)}</td>
+                              <td className="pr-2 font-mono">{fmt(r.truth)}</td>
+                              <td className="pr-2 font-mono">{fmt(r.estimate)} <span className="text-muted">[{fmt(r.lo)}; {fmt(r.hi)}]</span></td>
+                              <td className={r.inCI ? "text-good" : "text-bad"}>{r.inCI ? t.yes : t.no}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </section>
       )}
