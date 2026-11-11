@@ -8,23 +8,25 @@ export type Row = {
   quarter: number; // 1..4
   score: number; // 0..100, one student's result on a topic test
   baseline: number; // class result on last year's final test, 0..100
+  hours?: number; // hours actually taught on the topic (optional; enables the data-based "what if")
 };
 
 export type Response = { school: string; cls: string; student: number; item: number; answer: string; correct: boolean; total: number };
 
 export type Topic = { name: string; kk: string; en: string; hours: number; quarter: number };
 
+// DEMO ASSUMPTION: 102 h/year (3 h/week) as in the 2017 standard programme and 2025–26 term plans; the current programme text was not verified.
 export const TOPICS: Topic[] = [
-  { name: "Степень с натуральным показателем", kk: "Натурал көрсеткішті дәреже", en: "Powers with natural exponents", hours: 8, quarter: 1 },
-  { name: "Одночлены", kk: "Бірмүшелер", en: "Monomials", hours: 6, quarter: 1 },
-  { name: "Многочлены", kk: "Көпмүшелер", en: "Polynomials", hours: 10, quarter: 1 },
-  { name: "Формулы сокращённого умножения", kk: "Қысқаша көбейту формулалары", en: "Special products", hours: 10, quarter: 2 },
-  { name: "Разложение на множители", kk: "Көбейткіштерге жіктеу", en: "Factoring", hours: 8, quarter: 2 },
-  { name: "Алгебраические дроби", kk: "Алгебралық бөлшектер", en: "Algebraic fractions", hours: 10, quarter: 3 },
-  { name: "Линейная функция", kk: "Сызықтық функция", en: "Linear function", hours: 8, quarter: 3 },
-  { name: "Линейные уравнения", kk: "Сызықтық теңдеулер", en: "Linear equations", hours: 6, quarter: 4 },
-  { name: "Системы линейных уравнений", kk: "Сызықтық теңдеулер жүйесі", en: "Systems of linear equations", hours: 8, quarter: 4 },
-  { name: "Элементы статистики", kk: "Статистика элементтері", en: "Elements of statistics", hours: 6, quarter: 4 },
+  { name: "Степень с натуральным показателем", kk: "Натурал көрсеткішті дәреже", en: "Powers with natural exponents", hours: 10, quarter: 1 },
+  { name: "Одночлены", kk: "Бірмүшелер", en: "Monomials", hours: 8, quarter: 1 },
+  { name: "Многочлены", kk: "Көпмүшелер", en: "Polynomials", hours: 12, quarter: 1 },
+  { name: "Формулы сокращённого умножения", kk: "Қысқаша көбейту формулалары", en: "Special products", hours: 13, quarter: 2 },
+  { name: "Разложение на множители", kk: "Көбейткіштерге жіктеу", en: "Factoring", hours: 10, quarter: 2 },
+  { name: "Алгебраические дроби", kk: "Алгебралық бөлшектер", en: "Algebraic fractions", hours: 13, quarter: 3 },
+  { name: "Линейная функция", kk: "Сызықтық функция", en: "Linear function", hours: 10, quarter: 3 },
+  { name: "Линейные уравнения", kk: "Сызықтық теңдеулер", en: "Linear equations", hours: 8, quarter: 4 },
+  { name: "Системы линейных уравнений", kk: "Сызықтық теңдеулер жүйесі", en: "Systems of linear equations", hours: 10, quarter: 4 },
+  { name: "Элементы статистики", kk: "Статистика элементтері", en: "Elements of statistics", hours: 8, quarter: 4 },
 ];
 
 export const BOOKS = ["Учебник А (демо)", "Учебник Б (демо)", "Учебник В (демо)"] as const;
@@ -38,6 +40,9 @@ export const COVERAGE: Record<string, number[]> = {
 
 // Topic base difficulty (expected mean for an average class) and textbook-specific chapter effects.
 const BASE = [74, 78, 68, 57, 55, 52, 61, 80, 64, 76];
+// DEMO TRUTH: p.p. gained per unit of ln(taught/plan) hours
+export const HOURS_GAIN = 20;
+
 // DEMO TRUTH: effects injected into the generator; the honesty check compares the method against them
 export const BOOK_EFFECT: Record<string, number[]> = {
   "Учебник А (демо)": [0, 0, 1, 0, 1, 0, -1, 0, 0, 1],
@@ -102,9 +107,11 @@ export function generateDemo(): { rows: Row[]; responses: Response[] } {
           const ability = gauss() * 9;
           TOPICS.forEach((t, i) => {
             const drift = t.quarter >= 3 ? slide : 0;
-            const mean = BASE[i] + 0.7 * (baseline - 62) + BOOK_EFFECT[book][i] + classNoise[i] + drift;
+            // schools teach a topic ±2 h around plan (deterministic, no extra random draw); returns diminish: 6·ln(h/plan)
+            const taught = t.hours + (((schoolNo * 7 + i * 3) % 5) - 2);
+            const mean = BASE[i] + 0.7 * (baseline - 62) + BOOK_EFFECT[book][i] + classNoise[i] + drift + HOURS_GAIN * Math.log(taught / t.hours);
             const score = Math.max(0, Math.min(100, Math.round(mean + ability + gauss() * 10)));
-            rows.push({ district: d.name, school, cls, textbook: book, topic: t.name, quarter: t.quarter, score, baseline });
+            rows.push({ district: d.name, school, cls, textbook: book, topic: t.name, quarter: t.quarter, score, baseline, hours: taught });
           });
           const theta = (0.7 * (baseline - 62) + ability) / 12;
           const answers = ITEMS.map((it, j) => {

@@ -7,14 +7,13 @@ import { deviationByUnit, earlyWarnings, itemAnalysis, quarterDynamics } from "@
 import { differenceInDifferences, publisherIssues, remedialWeek, schoolTopicMeans } from "@/lib/wow";
 import { truthCheck, whereIsCause } from "@/lib/cause";
 import { askTemplate, buildFacts, explainTemplate, planTemplate } from "@/lib/explain";
+import { estimateHoursEffect, forecast, hoursToClose } from "@/lib/hoursEffect";
 import { T, type Lang } from "@/lib/i18n";
 import { parseImport, type Quality } from "@/lib/importer";
 import { smartMap, type Mapping } from "@/lib/smartImport";
 
 const DEMO = generateDemo();
 const PREV = generatePrevYear(DEMO.rows);
-// shortcut: assumed +2.5 p.p. per extra hour (demo assumption), estimate from real hour variation between schools when data has it
-const ELASTICITY = 2.5;
 const DEMO_HOURS = Object.fromEntries(TOPICS.map((t) => [t.name, t.hours]));
 const TOPIC_BY_NAME = Object.fromEntries(TOPICS.map((t) => [t.name, t]));
 const KEYS = ITEMS.map((i) => i.key);
@@ -125,6 +124,7 @@ export default function Home() {
     const issues = publisherIssues(eff.cells);
     return { eff, did, distMean, issues };
   }, [rows, allCts, isDemo, mapTopic]);
+  const hoursModel = useMemo(() => estimateHoursEffect(rows, allCts, hours), [rows, allCts, hours]);
   const causes = a.stats.map((st) => whereIsCause(view.cts, a.eff.cells, st.topic, st.mean));
   const factInput = { stats: a.stats, overall: a.eff.overall, cells: a.eff.cells, recs: a.recs, items: a.items, warns: a.warns, did: w.did, label, fmt };
   const facts = buildFacts(factInput);
@@ -623,11 +623,16 @@ export default function Home() {
               {(() => {
                 const s = a.stats.find((x) => x.topic === (wiTopic || sorted[0]?.topic));
                 if (!s) return null;
-                const pred = Math.max(0, Math.min(95, s.mean + ELASTICITY * wiDelta));
+                if (!hoursModel) return <p className="mt-3 text-[15px] text-muted">{t.noHoursData}</p>;
+                const plan = hours[s.topic] ?? 6;
+                const f = forecast(hoursModel, plan, wiDelta);
+                const pred = Math.max(0, Math.min(100, s.mean + f.gain));
+                const need = hoursToClose(hoursModel, plan, TARGET - s.mean);
                 return (
                   <p className="mt-3 text-[15px]">
-                    {label(s.topic)}: <span className="font-mono">{s.mean}% → {pred.toFixed(1)}%</span> {pred >= TARGET ? `✓ ${t.reach}` : `· ${t.toTarget} ${Math.ceil((TARGET - s.mean) / ELASTICITY)} ${t.h}`}
-                    <span className="mt-1 block text-xs text-muted">{t.whatIfNote}</span>
+                    {label(s.topic)}: <span className="font-mono">{s.mean}% → {pred.toFixed(1)}% <span className="text-muted">({fmt(f.gain)} [{fmt(f.lo)}; {fmt(f.hi)}] п.п.)</span></span>{" "}
+                    {pred >= TARGET ? `✓ ${t.reach}` : need == null ? `· ${t.cantClose}` : `· ${t.toTarget} ${need} ${t.h}`}
+                    <span className="mt-1 block text-xs text-muted">{t.whatIfData(hoursModel.n, fmt(hoursModel.beta), fmt(hoursModel.lo), fmt(hoursModel.hi))}</span>
                   </p>
                 );
               })()}
@@ -836,6 +841,10 @@ export default function Home() {
             </div>
           </div>
           <div>
+            <div className="mb-6 rounded-md border border-line bg-card p-4 text-sm">
+              <h3 className="font-medium">{t.passport}</h3>
+              <p className="mt-1">{t.passportRows(isDemo ? t.demoSource : t.importSource, rows.length, schools.length, new Set(rows.map((r) => `${r.school}|${r.cls}`)).size, [...new Set(rows.map((r) => r.quarter))].sort().join(", "), quality ? String(quality.total - quality.ok) : "0")}</p>
+            </div>
             <h2 className="font-display text-2xl">{t.method}</h2>
             <ol className="mt-3 grid gap-3 text-[15px] leading-snug">
               {t.methodItems.map((m, i) => (
