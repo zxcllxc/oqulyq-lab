@@ -38,6 +38,7 @@ export default function Home() {
   const [mapTopic, setMapTopic] = useState("");
   const [openAction, setOpenAction] = useState("");
   const [showTruth, setShowTruth] = useState(false);
+  const [welcome, setWelcome] = useState(false);
   const [rawImport, setRawImport] = useState<Record<string, unknown>[] | null>(null);
   const [overrides, setOverrides] = useState<Record<string, Mapping["field"]>>({});
   const [pasted, setPasted] = useState("");
@@ -51,6 +52,7 @@ export default function Home() {
     try {
       const saved = localStorage.getItem("oq-theme");
       if (saved === "dark" || (!saved && matchMedia("(prefers-color-scheme: dark)").matches)) setDark(true);
+      if (!localStorage.getItem("oq-welcomed")) setWelcome(true);
       const l = localStorage.getItem("oq-lang");
       if (l === "ru" || l === "kk" || l === "en") setLang(l);
     } catch {}
@@ -228,6 +230,20 @@ export default function Home() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 pb-24 sm:px-8">
+      {welcome && (
+        <div className="print:hidden fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+          <div className="w-full max-w-md rounded-md bg-paper p-6 shadow-xl">
+            <h2 id="welcome-title" className="font-display text-2xl">{t.welcomeTitle}</h2>
+            <p className="mt-2 text-sm text-muted">{t.welcomeNote}</p>
+            <div className="mt-4 grid gap-2">
+              {(Object.keys(t.welcomeRoles) as Role[]).map((r) => (
+                <button key={r} onClick={() => { changeRole(r); setWelcome(false); try { localStorage.setItem("oq-welcomed", "1"); } catch {} }} className="rounded-md border border-line bg-card px-3 py-2 text-left text-[15px] hover:border-ink">{t.welcomeRoles[r]}</button>
+              ))}
+            </div>
+            <button onClick={() => { setWelcome(false); try { localStorage.setItem("oq-welcomed", "1"); } catch {} }} className="mt-3 text-sm text-accent underline underline-offset-2">{t.welcomeSkip}</button>
+          </div>
+        </div>
+      )}
       <header className="flex flex-wrap items-end justify-between gap-4 border-b border-ink pt-8 pb-5">
         <div>
           <div className="font-mono text-xs uppercase tracking-[0.18em] text-muted">Data-Driven Curriculum</div>
@@ -400,6 +416,7 @@ export default function Home() {
 
       {show(1) && (
         <section className="mt-4 grid grid-cols-1 gap-10 [&>*]:min-w-0">
+          {naiveBest && <p className="mt-1 rounded-md border-l-4 border-accent bg-card px-3 py-2 text-[15px] font-medium">{t.keyBooks(naiveBest.textbook, String(naiveBest.naive), fmt(naiveBest.effect))}</p>}
           <div>
             <h2 className="font-display text-2xl">{t.causeTitle}</h2>
             <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.causeNote}</p>
@@ -443,7 +460,7 @@ export default function Home() {
                       <td className="pr-3 font-mono tabular-nums">{e.baseline}%</td>
                       <td className="pr-3 font-mono tabular-nums">{e.naive}%</td>
                       <td className="pr-3 font-mono tabular-nums">{fmt(e.effect)} <span className="text-muted">[{fmt(e.lo)}; {fmt(e.hi)}]</span></td>
-                      <td><Verdict v={e.verdict} text={t.v[e.verdict]} /></td>
+                      <td><Verdict v={e.verdict} text={t.v[e.verdict]} />{e.verdict === "few" && <div className="text-xs text-muted">{t.fewHelp(e.k)}</div>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -521,6 +538,7 @@ export default function Home() {
         <section className="mt-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
+              {moved > 0 && <p className="mb-3 rounded-md border-l-4 border-accent bg-card px-3 py-2 text-[15px] font-medium">{t.keyHours(moved)}</p>}
               <h2 className="font-display text-2xl">{t.hoursTitle}</h2>
               <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.hoursNote}</p>
             </div>
@@ -572,6 +590,7 @@ export default function Home() {
         <section className="mt-4 grid grid-cols-1 gap-10 [&>*]:min-w-0">
           <div>
             <div className="flex flex-wrap items-end justify-between gap-3">
+              {w.did[0]?.significant && <p className="mb-3 w-full rounded-md border-l-4 border-accent bg-card px-3 py-2 text-[15px] font-medium">{t.keyJust(label(w.did[0].topic), fmt(w.did[0].did))}</p>}
               <h2 className="font-display text-2xl">{t.didTitle}</h2>
               <button onClick={downloadMemo} className="print:hidden rounded-full border border-ink px-4 py-1.5 text-sm hover:bg-ink hover:text-paper">{t.memo}</button>
             </div>
@@ -600,6 +619,7 @@ export default function Home() {
 
       {show(3) && (
         <section className="mt-4">
+          {badItems.length > 0 && <p className="mb-3 rounded-md border-l-4 border-accent bg-card px-3 py-2 text-[15px] font-medium">{t.keyItems(badItems.length)}</p>}
           <h2 className="font-display text-2xl">{t.itemsTitle}</h2>
           <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.itemsNote}</p>
           {a.items.length === 0 ? <p className="mt-4 text-muted">—</p> : (
@@ -642,6 +662,7 @@ export default function Home() {
       {show(4) && (
         <section className="mt-4 grid grid-cols-1 gap-10 [&>*]:min-w-0">
           <div>
+            {a.warns.length > 0 && <p className="mb-3 rounded-md border-l-4 border-accent bg-card px-3 py-2 text-[15px] font-medium">{t.keyDyn(a.warns.length)}</p>}
             <h2 className="font-display text-2xl">{t.dynTitle}</h2>
             <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.dynNote}</p>
             <div className="mt-4 grid gap-6 sm:grid-cols-2">
@@ -769,6 +790,10 @@ export default function Home() {
               ))}
             </ol>
             <p className="mt-4 font-mono text-xs text-muted">PASS = {PASS} · TARGET = {TARGET} · CI = 95%</p>
+            <div className="mt-6">
+              <h3 className="font-display text-xl">{t.whyTitle}</h3>
+              <ul className="mt-2 grid gap-2 text-[15px] leading-snug">{t.whyItems.map((x, i) => <li key={i} className="flex gap-2"><span className="font-mono text-accent">✓</span><span>{x}</span></li>)}</ul>
+            </div>
             {isDemo && (
               <div className="mt-6 rounded-md border border-ink p-4">
                 <h3 className="font-display text-xl">{t.truthTitle}</h3>
