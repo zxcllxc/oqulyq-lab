@@ -6,6 +6,8 @@ import { classTopics, hourRecs, PASS, TARGET, textbookEffects, topicStats } from
 import { T, type Lang } from "@/lib/i18n";
 
 const DEMO = generateDemo();
+// shortcut: assumed +2.5 p.p. per extra hour (demo assumption), estimate from real hour variation between schools when data has it
+const ELASTICITY = 2.5;
 const DEMO_HOURS = Object.fromEntries(TOPICS.map((t) => [t.name, t.hours]));
 const KK = Object.fromEntries(TOPICS.map((t) => [t.name, t.kk]));
 
@@ -16,6 +18,14 @@ export default function Home() {
   const [hours, setHours] = useState<Record<string, number>>(DEMO_HOURS);
   const [isDemo, setIsDemo] = useState(true);
   const [err, setErr] = useState("");
+  const [wiTopic, setWiTopic] = useState("");
+  const [wiDelta, setWiDelta] = useState(2);
+  const [all, setAll] = useState(false);
+  const show = (i: number) => tab === i || all;
+  function printReport() {
+    setAll(true);
+    setTimeout(() => { window.print(); setAll(false); }, 300);
+  }
   const t = T[lang];
   const label = (topic: string) => (lang === "kk" && KK[topic]) || topic;
 
@@ -27,7 +37,11 @@ export default function Home() {
     const recs = hourRecs(stats, hours, eff.cells, lang, (x) => (lang === "kk" && KK[x]) || x);
     const schools = new Set(rows.map((r) => r.school)).size;
     const classes = new Set(rows.map((r) => `${r.school}|${r.cls}`)).size;
-    return { topics, stats, eff, recs, schools, classes };
+    const schoolList = [...new Set(rows.map((r) => r.school))];
+    const cell = new Map<string, [number, number]>();
+    for (const r of rows) { const k = `${r.school}|${r.topic}`; const c = cell.get(k) ?? [0, 0]; c[0] += r.score; c[1]++; cell.set(k, c); }
+    const heat = (sc: string, tp: string) => { const c = cell.get(`${sc}|${tp}`); return c ? Math.round(c[0] / c[1]) : null; };
+    return { topics, stats, eff, recs, schools, classes, schoolList, heat };
   }, [rows, hours, lang]);
 
   const sorted = [...a.stats].sort((x, y) => x.mean - y.mean);
@@ -101,11 +115,12 @@ export default function Home() {
               </button>
             ))}
           </div>
+          <button onClick={printReport} className="print:hidden rounded-full border border-ink px-3 py-1 text-sm hover:bg-ink hover:text-paper">{t.report}</button>
           <span className={`rounded-sm px-2 py-0.5 font-mono text-[11px] ${isDemo ? "bg-amber text-ink" : "bg-good text-paper"}`}>{isDemo ? t.demo : `${t.imported}: ${rows.length} ${t.rows}`}</span>
         </div>
       </header>
 
-      <nav className="sticky top-0 z-10 -mx-4 flex gap-1 overflow-x-auto bg-paper/95 px-4 py-3 backdrop-blur sm:mx-0 sm:px-0">
+      <nav className="print:hidden sticky top-0 z-10 -mx-4 flex gap-1 overflow-x-auto bg-paper/95 px-4 py-3 backdrop-blur sm:mx-0 sm:px-0">
         {t.tabs.map((name, i) => (
           <button key={name} onClick={() => setTab(i)} className={`shrink-0 rounded-full px-4 py-1.5 text-sm transition-colors ${tab === i ? "bg-ink text-paper" : "hover:bg-line"}`}>
             {name}
@@ -113,7 +128,7 @@ export default function Home() {
         ))}
       </nav>
 
-      {tab === 0 && (
+      {show(0) && (
         <section className="mt-4 grid gap-10">
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line sm:grid-cols-4">
             {([[rows.length, t.students], [a.classes, t.classes], [a.schools, t.schools], [a.topics.length, t.topics]] as const).map(([n, l]) => (
@@ -160,10 +175,33 @@ export default function Home() {
               ))}
             </ul>
           </div>
+
+          <div>
+            <h2 className="font-display text-2xl">{t.heatSchool}</h2>
+            <p className="mt-2 text-sm text-muted">{t.heatSchoolNote}</p>
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[720px] border-separate border-spacing-[2px] text-xs">
+                <thead><tr><th className="text-left font-normal text-muted">{t.schools}</th>{a.topics.map((tp, i) => <th key={tp} title={label(tp)} className="w-12 font-mono font-normal text-muted">T{i + 1}</th>)}</tr></thead>
+                <tbody>
+                  {a.schoolList.map((sc) => (
+                    <tr key={sc}>
+                      <td className="pr-2 text-[13px] whitespace-nowrap">{sc}</td>
+                      {a.topics.map((tp) => {
+                        const v = a.heat(sc, tp);
+                        const alpha = v == null ? 0 : Math.max(0.06, Math.min(1, (90 - v) / 50));
+                        return <td key={tp} title={`${label(tp)}: ${v ?? "—"}%`} className="h-8 rounded-sm text-center font-mono tabular-nums" style={{ background: `rgba(180,68,44,${alpha})`, color: alpha > 0.55 ? "#f5f2ea" : "#1c1b17" }}>{v ?? "—"}</td>;
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="mt-2 font-mono text-[11px] text-muted">{a.topics.map((tp, i) => `T${i + 1} ${label(tp)}`).join(" · ")}</p>
+            </div>
+          </div>
         </section>
       )}
 
-      {tab === 1 && (
+      {show(1) && (
         <section className="mt-4 grid gap-10">
           <div>
             <h2 className="font-display text-2xl">{t.booksTitle}</h2>
@@ -216,7 +254,7 @@ export default function Home() {
         </section>
       )}
 
-      {tab === 2 && (
+      {show(2) && (
         <section className="mt-4">
           <h2 className="font-display text-2xl">{t.hoursTitle}</h2>
           <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.hoursNote}</p>
@@ -234,6 +272,27 @@ export default function Home() {
                 <p className="text-[15px] leading-snug">{r.why}</p>
               </article>
             ))}
+            <div className="rounded-md border border-ink p-4">
+              <h3 className="font-display text-xl">{t.whatIf}</h3>
+              <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+                <select value={wiTopic || sorted[0]?.topic} onChange={(e) => setWiTopic(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1">
+                  {a.stats.map((s) => <option key={s.topic} value={s.topic}>{label(s.topic)}</option>)}
+                </select>
+                <input type="range" min={-3} max={4} value={wiDelta} onChange={(e) => setWiDelta(Number(e.target.value))} aria-label="hours" />
+                <span className="font-mono">{wiDelta > 0 ? "+" : ""}{wiDelta} {lang === "ru" ? "ч" : "сағ"}</span>
+              </div>
+              {(() => {
+                const s = a.stats.find((x) => x.topic === (wiTopic || sorted[0]?.topic));
+                if (!s) return null;
+                const pred = Math.max(0, Math.min(95, s.mean + ELASTICITY * wiDelta));
+                return (
+                  <p className="mt-3 text-[15px]">
+                    {label(s.topic)}: <span className="font-mono">{s.mean}% → {pred.toFixed(1)}%</span> {pred >= TARGET ? `✓ ${t.reach}` : `· ${t.toTarget} ${Math.ceil((TARGET - s.mean) / ELASTICITY)} ${lang === "ru" ? "ч" : "сағ"}`}
+                    <span className="mt-1 block text-xs text-muted">{t.whatIfNote}</span>
+                  </p>
+                );
+              })()}
+            </div>
             <div className="flex justify-end border-t border-ink pt-3 font-mono text-sm">
               {t.total}: {a.recs.reduce((s, r) => s + r.plan, 0)} → {a.recs.reduce((s, r) => s + r.rec, 0)}
             </div>
@@ -241,7 +300,7 @@ export default function Home() {
         </section>
       )}
 
-      {tab === 3 && (
+      {show(3) && (
         <section className="mt-4 grid gap-10 lg:grid-cols-2">
           <div>
             <h2 className="font-display text-2xl">{t.upload}</h2>
