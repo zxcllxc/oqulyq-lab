@@ -43,6 +43,19 @@ export default function Home() {
   const [askQ, setAskQ] = useState("");
   const [askA, setAskA] = useState<{ answer: string; refs: string[] } | null>(null);
   const [planText, setPlanText] = useState<string | null>(null);
+  const [aiExplain, setAiExplain] = useState<{ status: "idle" | "loading" | "ai" | "off" | "limit"; text?: string }>({ status: "idle" });
+  const [aiAsk, setAiAsk] = useState<{ status: "idle" | "loading" | "ai" | "off" | "limit"; text?: string }>({ status: "idle" });
+  // AI explains facts computed by code; on any refusal (no credit, limit, ungrounded number) the template stays
+  async function callAi(mode: "explain" | "ask", fs: { id: string; text: string }[], question = ""): Promise<{ status: "ai" | "off" | "limit"; text?: string }> {
+    try {
+      const r = await fetch("/api/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode, lang, question, facts: fs.map(({ id, text }) => ({ id, text })) }) });
+      const j = await r.json();
+      if (r.ok && j.text) return { status: "ai", text: j.text };
+      return { status: j.reason === "rate_ip" || j.reason === "rate_day" ? "limit" : "off" };
+    } catch {
+      return { status: "off" };
+    }
+  }
   const [rawImport, setRawImport] = useState<Record<string, unknown>[] | null>(null);
   const [overrides, setOverrides] = useState<Record<string, Mapping["field"]>>({});
   const [pasted, setPasted] = useState("");
@@ -132,6 +145,10 @@ export default function Home() {
   const tabFacts = tab === 0 || ownFacts.length === 0 ? facts : ownFacts; // a tab without its own facts gets the overall picture
   const explained = explainTemplate(tabFacts);
   const goFact = (id: string) => { const f = facts.find((x) => x.id === id); if (f) { setTab(f.tab); setExplainOpen(false); window.scrollTo({ top: 0 }); } };
+  const withChips = (text: string) => text.split(/(\[[A-Z]+\d+\])/g).map((part, i) => {
+    const m = part.match(/^\[([A-Z]+\d+)\]$/);
+    return m && facts.some((f) => f.id === m[1]) ? <RefChip key={i} id={m[1]} /> : <span key={i}>{part}</span>;
+  });
   const RefChip = ({ id }: { id: string }) => <button onClick={() => goFact(id)} className="ml-1 rounded-sm border border-accent px-1 font-mono text-[11px] text-accent hover:bg-accent hover:text-paper">{id}</button>;
   const truth = isDemo && showTruth ? truthCheck(allCts, w.eff.cells) : null;
 
@@ -298,9 +315,9 @@ export default function Home() {
         <span className="mx-2 h-5 w-px shrink-0 bg-line" />
         <span className="mr-1 shrink-0 font-mono text-[11px] uppercase tracking-wider text-muted">{t.groups[1]}</span>
         {[3, 4, 5].map(tabBtn)}
-        <button onClick={() => setExplainOpen(true)} className="ml-auto hidden shrink-0 rounded-full bg-accent px-4 py-1.5 text-sm text-paper sm:inline-block">{t.explainBtn}</button>
+        <button onClick={() => { setExplainOpen(true); setAiExplain({ status: "loading" }); callAi("explain", tabFacts).then(setAiExplain); }} className="ml-auto hidden shrink-0 rounded-full bg-accent px-4 py-1.5 text-sm text-paper sm:inline-block">{t.explainBtn}</button>
       </nav>
-      <button onClick={() => setExplainOpen(true)} className="print:hidden fixed right-4 bottom-4 z-30 rounded-full bg-accent px-5 py-3 text-sm text-paper shadow-lg sm:hidden">{t.explainBtn}</button>
+      <button onClick={() => { setExplainOpen(true); setAiExplain({ status: "loading" }); callAi("explain", tabFacts).then(setAiExplain); }} className="print:hidden fixed right-4 bottom-4 z-30 rounded-full bg-accent px-5 py-3 text-sm text-paper shadow-lg sm:hidden">{t.explainBtn}</button>
       {explainOpen && (
         <div className="print:hidden fixed inset-0 z-40 flex justify-end bg-ink/30" onClick={() => setExplainOpen(false)}>
           <aside role="dialog" aria-modal="true" aria-label={t.explainTitle} onClick={(e) => e.stopPropagation()} className="h-full w-full max-w-md overflow-y-auto bg-paper p-5 shadow-xl">
@@ -309,11 +326,12 @@ export default function Home() {
               <button onClick={() => setExplainOpen(false)} className="text-sm underline">{t.close}</button>
             </div>
             <p className="mt-2 rounded-md border-l-4 border-good bg-card p-2 text-sm">{t.trustRule}</p>
-            <p className="mt-1 font-mono text-[11px] text-muted">{t.aiOff}</p>
-            {explained.summary.length > 0 && <h3 className="mt-4 font-medium">{t.whatHappens}</h3>}
-            <ul className="mt-1 grid gap-2 text-[15px]">{explained.summary.map((s, i) => <li key={i}>{s.text}{s.refs.map((r) => <RefChip key={r} id={r} />)}</li>)}</ul>
-            {explained.steps.length > 0 && <h3 className="mt-4 font-medium">{t.thisWeek}</h3>}
-            <ol className="mt-1 grid list-decimal gap-2 pl-5 text-[15px]">{explained.steps.map((s, i) => <li key={i}>{s.text}{s.refs.map((r) => <RefChip key={r} id={r} />)}</li>)}</ol>
+            <p className="mt-1 font-mono text-[11px] text-muted">{aiExplain.status === "loading" ? t.aiLoading : aiExplain.status === "ai" ? t.aiOn : aiExplain.status === "limit" ? t.aiLimit : t.aiOff}</p>
+            {aiExplain.status === "ai" && aiExplain.text && <div className="mt-3 whitespace-pre-line text-[15px] leading-relaxed">{withChips(aiExplain.text)}</div>}
+            {aiExplain.status !== "ai" && explained.summary.length > 0 && <h3 className="mt-4 font-medium">{t.whatHappens}</h3>}
+            <ul className={`mt-1 grid gap-2 text-[15px] ${aiExplain.status === "ai" ? "hidden" : ""}`}>{explained.summary.map((s, i) => <li key={i}>{s.text}{s.refs.map((r) => <RefChip key={r} id={r} />)}</li>)}</ul>
+            {aiExplain.status !== "ai" && explained.steps.length > 0 && <h3 className="mt-4 font-medium">{t.thisWeek}</h3>}
+            <ol className={`mt-1 grid list-decimal gap-2 pl-5 text-[15px] ${aiExplain.status === "ai" ? "hidden" : ""}`}>{explained.steps.map((s, i) => <li key={i}>{s.text}{s.refs.map((r) => <RefChip key={r} id={r} />)}</li>)}</ol>
             <h3 className="mt-4 font-medium">{t.facts}</h3>
             <ul className="mt-1 grid gap-1 text-sm">{tabFacts.map((f) => <li key={f.id}><span className="font-mono text-accent">[{f.id}]</span> {f.text}</li>)}</ul>
           </aside>
@@ -347,12 +365,13 @@ export default function Home() {
 
           <div className="rounded-md border border-ink p-4">
             <h2 className="font-display text-2xl">{t.askTitle}</h2>
-            <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setAskA(askTemplate(askQ, facts)); }}>
+            <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setAskA(askTemplate(askQ, facts)); setAiAsk({ status: "loading" }); callAi("ask", facts, askQ).then(setAiAsk); }}>
               <input name="ask" value={askQ} onChange={(e) => setAskQ(e.target.value)} placeholder={t.askPh} className="min-w-0 flex-1 rounded-md border border-line bg-paper px-3 py-2 text-[15px]" />
               <button type="submit" className="rounded-full bg-ink px-4 py-1.5 text-sm text-paper">{t.askBtn}</button>
             </form>
-            <p className="mt-1 font-mono text-[11px] text-muted">{t.aiOff} {t.trustRule}</p>
-            {askA && <div className="mt-3 whitespace-pre-line text-[15px]">{askA.answer}{askA.refs.length > 0 && <div className="mt-1">{askA.refs.map((r) => <RefChip key={r} id={r} />)}</div>}</div>}
+            <p className="mt-1 font-mono text-[11px] text-muted">{aiAsk.status === "loading" ? t.aiLoading : aiAsk.status === "ai" ? t.aiOn : aiAsk.status === "limit" ? t.aiLimit : t.aiOff} {t.trustRule}</p>
+            {aiAsk.status === "ai" && aiAsk.text && <div className="mt-3 whitespace-pre-line text-[15px]">{withChips(aiAsk.text)}</div>}
+            {askA && aiAsk.status !== "ai" && <div className="mt-3 whitespace-pre-line text-[15px]">{askA.answer}{askA.refs.length > 0 && <div className="mt-1">{askA.refs.map((r) => <RefChip key={r} id={r} />)}</div>}</div>}
           </div>
 
           <div>
