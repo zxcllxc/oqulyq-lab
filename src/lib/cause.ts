@@ -40,7 +40,10 @@ export function whereIsCause(cts: ClassTopic[], cells: Effect[], topic: string, 
 
   const low = rs.filter((r) => r.resid <= LOW_CLASS).sort((a, b) => a.resid - b.resid);
   const topicCells = cells.filter((c) => c.topic === topic);
-  const robust = topicCells.filter((c) => c.verdict === "worse").sort((a, b) => a.effect - b.effect)[0];
+  // textbooks differ if any cell is robustly better or worse, or textbooks explain >= 30% of the spread;
+  // then the topic is NOT "low with every textbook" — the weakest textbook is named
+  const differ = topicCells.some((c) => c.verdict === "worse" || c.verdict === "better") || shares.textbook >= 30;
+  const robust = differ ? topicCells.filter((c) => Number.isFinite(c.lo) && c.k >= 3).sort((a, b) => a.effect - b.effect)[0] : undefined;
   // the weakest class is always reported as local context; the PRIMARY level follows the priority textbook → program → school/class
   const local = low.length
     ? (() => {

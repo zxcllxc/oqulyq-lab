@@ -182,7 +182,8 @@ export default function Home() {
 
   const findings: { text: string; tab: number }[] = [];
   if (sorted[0]) findings.push({ tab: 0, text: lang === "en" ? `Hardest topic: “${label(sorted[0].topic)}” — ${sorted[0].mean}%, mastered by ${sorted[0].mastery}% of students.` : lang === "kk" ? `Ең қиын тақырып — «${label(sorted[0].topic)}»: ${sorted[0].mean}%, меңгергені ${sorted[0].mastery}%.` : `Самая трудная тема — «${label(sorted[0].topic)}»: ${sorted[0].mean}%, усвоили ${sorted[0].mastery}% учеников.` });
-  if (naiveBest && a.eff.overall.length > 1) findings.push({ tab: 1, text: lang === "en" ? `“${naiveBest.textbook}” looks best by mean (${naiveBest.naive}%), but after adjusting for class level its effect is ${fmt(naiveBest.effect)} p.p. — ${t.v[naiveBest.verdict]}.` : lang === "kk" ? `«${naiveBest.textbook}» орташа бойынша ең үздік сияқты (${naiveBest.naive}%), бірақ сынып деңгейін ескергенде әсері ${fmt(naiveBest.effect)} п.п. — ${t.v[naiveBest.verdict]}.` : `«${naiveBest.textbook}» выглядит лучшим по среднему (${naiveBest.naive}%), но после учёта уровня классов его эффект ${fmt(naiveBest.effect)} п.п. — ${t.v[naiveBest.verdict]}.` });
+  if (naiveBest && a.eff.overall.length > 1 && (naiveBest.verdict === "few" || naiveBest.verdict === "noadj")) findings.push({ tab: 1, text: `«${naiveBest.textbook}»: ${naiveBest.naive}% — ${t.fewNoNumber} (${t.v[naiveBest.verdict]}).` });
+  else if (naiveBest && a.eff.overall.length > 1) findings.push({ tab: 1, text: lang === "en" ? `“${naiveBest.textbook}” looks best by mean (${naiveBest.naive}%), but after adjusting for class level its effect is ${fmt(naiveBest.effect)} p.p. — ${t.v[naiveBest.verdict]}.` : lang === "kk" ? `«${naiveBest.textbook}» орташа бойынша ең үздік сияқты (${naiveBest.naive}%), бірақ сынып деңгейін ескергенде әсері ${fmt(naiveBest.effect)} п.п. — ${t.v[naiveBest.verdict]}.` : `«${naiveBest.textbook}» выглядит лучшим по среднему (${naiveBest.naive}%), но после учёта уровня классов его эффект ${fmt(naiveBest.effect)} п.п. — ${t.v[naiveBest.verdict]}.` });
   if (worstCell) findings.push({ tab: 1, text: lang === "en" ? `Weak chapter: “${worstCell.textbook}”, “${label(worstCell.topic!)}” — ${fmt(worstCell.effect)} p.p. vs expected.` : lang === "kk" ? `Оқулықтың әлсіз жері: «${worstCell.textbook}», «${label(worstCell.topic!)}» — күтілгенге ${fmt(worstCell.effect)} п.п.` : `Слабое место учебника: «${worstCell.textbook}», тема «${label(worstCell.topic!)}» — ${fmt(worstCell.effect)} п.п. к ожидаемому.` });
   if (moved > 0) findings.push({ tab: 2, text: lang === "en" ? `Move ${moved} h to ${fmtList(hourWin.map((r) => label(r.topic)))} without raising the total load.` : lang === "kk" ? `${moved} сағатты мына тақырыптарға ауыстыру: ${fmtList(hourWin.map((r) => label(r.topic)))} — жүктемені арттырмай.` : `Перенести ${moved} ч в темы: ${fmtList(hourWin.map((r) => label(r.topic)))} — без увеличения нагрузки.` });
   if (a.warns.length) findings.push({ tab: 4, text: lang === "en" ? `${a.warns.length} classes slid in the second half-year — first: ${a.warns[0].school}, ${a.warns[0].cls} (${fmt(a.warns[0].drop)} p.p.).` : lang === "kk" ? `${a.warns.length} сынып 2-жартыжылдықта төмендеді — біріншісі: ${a.warns[0].school}, ${a.warns[0].cls} (${fmt(a.warns[0].drop)} п.п.).` : `Просели во 2-м полугодии классов: ${a.warns.length}. Первый: ${a.warns[0].school}, ${a.warns[0].cls} (${fmt(a.warns[0].drop)} п.п.).` });
@@ -339,9 +340,9 @@ export default function Home() {
         <span className="mx-2 h-5 w-px shrink-0 bg-line" />
         <span className="mr-1 shrink-0 font-mono text-[11px] uppercase tracking-wider text-muted">{t.groups[1]}</span>
         {[3, 4, 5].map(tabBtn)}
-        <button onClick={() => { setExplainOpen(true); setAiExplain({ status: "loading" }); callAi("explain", tabFacts).then(setAiExplain); }} className="ml-auto hidden shrink-0 rounded-full bg-accent px-4 py-1.5 text-sm text-paper sm:inline-block">{t.explainBtn}</button>
+        <button onClick={() => { setExplainOpen(true); if (aiOn) { setAiExplain({ status: "loading" }); callAi("explain", tabFacts).then(setAiExplain); } else setAiExplain({ status: "off" }); }} className="ml-auto hidden shrink-0 rounded-full bg-accent px-4 py-1.5 text-sm text-paper sm:inline-block">{t.explainBtn}</button>
       </nav>
-      <button onClick={() => { setExplainOpen(true); setAiExplain({ status: "loading" }); callAi("explain", tabFacts).then(setAiExplain); }} className="print:hidden fixed right-4 bottom-4 z-30 rounded-full bg-accent px-5 py-3 text-sm text-paper shadow-lg sm:hidden">{t.explainBtn}</button>
+      <button onClick={() => { setExplainOpen(true); if (aiOn) { setAiExplain({ status: "loading" }); callAi("explain", tabFacts).then(setAiExplain); } else setAiExplain({ status: "off" }); }} className="print:hidden fixed right-4 bottom-4 z-30 rounded-full bg-accent px-5 py-3 text-sm text-paper shadow-lg sm:hidden">{t.explainBtn}</button>
       {explainOpen && (
         <div className="print:hidden fixed inset-0 z-40 flex justify-end bg-ink/30" onClick={() => setExplainOpen(false)}>
           <aside role="dialog" aria-modal="true" aria-label={t.explainTitle} onClick={(e) => e.stopPropagation()} className="h-full w-full max-w-md overflow-y-auto bg-paper p-5 shadow-xl">
@@ -389,7 +390,7 @@ export default function Home() {
 
           <div className="rounded-md border border-ink p-4">
             <h2 className="font-display text-2xl">{t.askTitle}</h2>
-            <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setAskA(askTemplate(askQ, facts, lang, TOPICS.map((x) => label(x.name)))); setAiAsk({ status: "loading" }); callAi("ask", facts, askQ).then(setAiAsk); }}>
+            <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setAskA(askTemplate(askQ, facts, lang, TOPICS.map((x) => label(x.name)))); if (aiOn) { setAiAsk({ status: "loading" }); callAi("ask", facts, askQ).then(setAiAsk); } else setAiAsk({ status: "off" }); }}>
               <input name="ask" value={askQ} onChange={(e) => setAskQ(e.target.value)} placeholder={t.askPh} className="min-w-0 flex-1 rounded-md border border-line bg-paper px-3 py-2 text-[15px]" />
               <button type="submit" className="rounded-full bg-ink px-4 py-1.5 text-sm text-paper">{t.askBtn}</button>
             </form>
@@ -427,7 +428,7 @@ export default function Home() {
                     const props = { fill: `rgba(180,68,44,${alpha})`, stroke: "currentColor", strokeWidth: 1.5, className: "cursor-pointer text-ink hover:opacity-80", onClick: () => { setRole("district"); setScope(d); }, tabIndex: 0, role: "button", "aria-label": `${distLabel(d)}: ${v ?? "—"}%`, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter") { setRole("district"); setScope(d); } } };
                     return (
                       <g key={d}>
-                        {sh.d ? <path d={sh.d} {...props} /> : <circle cx={sh.c![0]} cy={sh.c![1]} r={sh.c![2]} {...props} />}
+                        {sh.d ? <path d={sh.d} {...props} /> : <><circle cx={sh.c![0]} cy={sh.c![1]} r={sh.c![2]} className="fill-paper" /><circle cx={sh.c![0]} cy={sh.c![1]} r={sh.c![2]} {...props} /></>}
                         <text x={sh.lx} y={sh.ly} textAnchor="middle" className="pointer-events-none fill-current font-mono text-[11px]">{distLabel(d).replace(" район", "").replace(" ауданы", "").replace(" district", "")} {v ?? "—"}%</text>
                       </g>
                     );
@@ -606,6 +607,7 @@ export default function Home() {
               {w.issues.length > 0 && <button onClick={downloadPublisher} className="print:hidden rounded-full border border-ink px-4 py-1.5 text-sm hover:bg-ink hover:text-paper">{t.publisherBtn}</button>}
             </div>
             <p className="mt-2 max-w-3xl text-sm text-muted">{t.publisherNote}</p>
+            {scope !== "all" && <p className="mt-1 text-sm font-medium text-accent">{t.regionWide}</p>}
             {w.issues.length === 0 ? <p className="mt-3">{t.noIssues}</p> : (
               <ul className="mt-3 grid gap-2">
                 {w.issues.map((i) => (
@@ -698,6 +700,7 @@ export default function Home() {
               <button onClick={downloadMemo} className="print:hidden rounded-full border border-ink px-4 py-1.5 text-sm hover:bg-ink hover:text-paper">{t.memo}</button>
             </div>
             <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.didNote}</p>
+            {scope !== "all" && <p className="mt-1 text-sm font-medium text-accent">{t.regionWide}</p>}
             <p className="mt-1 max-w-3xl text-sm"><b>{t.howToRead}:</b> {t.didHow.replace(/^[^:]+: /, "")}</p>
             {w.did.length === 0 ? <p className="mt-3 text-muted">—</p> : (
               <div className="mt-4 overflow-x-auto">
@@ -863,7 +866,7 @@ export default function Home() {
                 </div>
                 <p className="mt-2 font-mono text-xs">{t.smartStats(smart.records.length, smart.filled, smart.anonymized, smart.wide)}</p>
                 {smart.missing.length > 0 && <p className="mt-1 text-sm text-bad">{t.missingF(smart.missing.map((f) => t.fields[f]).join(", "))}</p>}
-                {smart.mapping.some((m) => m.field == null) && (
+                {aiOn && smart.mapping.some((m) => m.field == null) && (
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
                     <button onClick={askAiColumns} disabled={aiMapStatus === "loading"} className="rounded-full border border-accent px-3 py-1 text-accent hover:bg-accent hover:text-paper disabled:opacity-50">{t.aiColumns}</button>
                     <span className="font-mono text-[11px] text-muted">{aiMapStatus === "loading" ? t.aiLoading : aiMapStatus === "off" ? t.aiOff : aiMapStatus === "done" ? t.aiColumnsDone : t.aiColumnsNote}</span>

@@ -137,7 +137,7 @@ export function buildFacts(x: FactInput): Fact[] {
   x.items.filter((i) => i.flags.length).forEach((i) => f.push({ id: `Q${i.item + 1}`, tab: 3, text: T.item(i.item + 1, Math.round(i.p * 100), i.rpb, i.trap) }));
   x.warns.forEach((w, i) => f.push({ id: `W${i + 1}`, tab: 4, text: T.warn(nm(w.school), w.cls, x.fmt(w.drop), x.fmt(w.lo), x.fmt(w.hi)) }));
   (x.causes ?? []).filter((c) => c.level !== "none").forEach((c, i) => {
-    const extra = c.level === "textbook" && c.textbook ? T.causeBook(nm(c.textbook)) : (c.level === "class" || c.level === "school") && c.worst && c.others ? T.causeClass(c.worst.cls, nm(c.worst.school), c.others.n, x.fmt(c.others.mean)) : "";
+    const extra = c.level === "textbook" && c.textbook ? T.causeBook(nm(c.textbook)) : c.level === "school" && c.worst ? ` ${nm(c.worst.school)}` : c.level === "class" && c.worst && c.others ? T.causeClass(c.worst.cls, nm(c.worst.school), c.others.n, x.fmt(c.others.mean)) : "";
     f.push({ id: `R${i + 1}`, tab: 1, text: T.cause(x.label(c.topic), T.lvl[c.level] ?? c.level, extra) });
   });
   x.did.filter((d) => d.significant).slice(0, 3).forEach((d, i) => f.push({ id: `E${i + 1}`, tab: 6, text: T.did(nm(d.from), nm(d.to), x.label(d.topic), x.fmt(d.did), x.fmt(d.lo), x.fmt(d.hi)) }));
@@ -157,7 +157,10 @@ export function explainTemplate(facts: Fact[], lang: Lang = "ru"): { summary: { 
   else if (comparable.some((f) => f.verdict === "better" || f.verdict === "worse")) summary.push({ text: T.sDiff, refs: has("B") });
   else if (comparable.length) summary.push({ text: T.sSame, refs: has("B") });
   if (has("C").length) summary.push({ text: T.sC, refs: has("C") });
-  if (has("E").length) summary.push({ text: T.sE, refs: has("E") });
+  // the experiment "confirms" only when it hits a topic that also has a weak chapter
+  const cTopics = facts.filter((f) => f.id.startsWith("C")).map((f) => f.text);
+  const eHit = facts.filter((f) => f.id.startsWith("E") && cTopics.some((c) => (c.match(/«[^»]+»/g) ?? []).slice(-1).some((tp) => f.text.includes(tp))));
+  if (eHit.length) summary.push({ text: T.sE, refs: eHit.map((f) => f.id) });
   if (has("H").length) steps.push({ text: T.stH, refs: has("H") });
   if (has("C").length) steps.push({ text: T.stC, refs: has("C") });
   if (has("Q").length) steps.push({ text: T.stQ, refs: has("Q") });

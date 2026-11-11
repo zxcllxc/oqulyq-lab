@@ -47,3 +47,13 @@ test("fill-down does not leak class/textbook from the previous school; textbook 
   assert.equal(r.records[2].class, ""); // new school: previous class must not leak
   assert.equal(r.records[2].textbook, "");
 });
+
+test("one topic column next to entry level (the task's exact layout) is recognised and mapped to the programme topic", () => {
+  const raw = [
+    { "Школа": "№1", "Класс": "7А", "Учебник": "А", "ФИО": "Иванов", "Итог прошлого года": 60, "Дроби": 55 },
+    { "Школа": "", "Класс": "", "Учебник": "", "ФИО": "Петров", "Итог прошлого года": 60, "Дроби": 70 },
+  ];
+  const r = smartMap(raw);
+  assert.deepEqual(r.missing, []);
+  assert.equal(r.records[0].topic, "Алгебраические дроби");
+});

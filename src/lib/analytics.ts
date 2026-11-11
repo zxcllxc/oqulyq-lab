@@ -123,12 +123,16 @@ export function hourRecs(stats: TopicStat[], hours: Record<string, number>, cell
   const recs: HourRec[] = stats.map((s) => {
     const plan = hours[s.topic] ?? 6;
     const topicCells = cells.filter((c) => c.topic === s.topic);
-    const worst = topicCells.filter((c) => c.verdict === "worse").sort((x, y) => x.effect - y.effect)[0];
+    // same rule as "where is the cause": any robust difference between textbooks → name the weakest one, no hours
+    const differ = topicCells.some((c) => c.verdict === "worse" || c.verdict === "better");
+    const worst = differ ? topicCells.filter((c) => c.k >= 3 && Number.isFinite(c.lo)).sort((x, y) => x.effect - y.effect)[0] : undefined;
     const bookChecked = topicCells.some((c) => c.verdict === "better" || c.verdict === "worse" || c.verdict === "same" || c.verdict === "local");
     const gap = TARGET - s.mean;
     let cause: HourRec["cause"] = "ok";
     let want = 0;
-    if (gap > DEAD_ZONE && worst && worst.effect <= -gap / 2) cause = "textbook";
+    // textbook alone explains it when classes on the best textbook are (almost) at target; otherwise hours AND the chapter
+    const best = differ ? Math.max(...topicCells.filter((c) => c.k >= 3 && Number.isFinite(c.lo)).map((c) => c.effect)) : -Infinity;
+    if (gap > DEAD_ZONE && worst && s.mean + best >= TARGET - DEAD_ZONE) cause = "textbook";
     else if (gap > DEAD_ZONE) { cause = "hours"; want = Math.min(3, Math.max(1, Math.round(gap / 7))); }
     else if (s.mean >= TARGET + DEAD_ZONE) cause = "surplus";
     return { topic: s.topic, plan, rec: plan, delta: 0, mean: s.mean, cause, weakBook: worst?.textbook, bookChecked, why: "", want } as HourRec & { want: number };
@@ -155,6 +159,7 @@ export function hourRecs(stats: TopicStat[], hours: Record<string, number>, cell
         r.cause === "hours" && r.delta === 0 && noReserve ? `Средний балл ${r.mean}% ниже цели на ${gap} п.п., но взять часы не у кого: нет тем выше цели с запасом. Нужен пересмотр годового объёма.` :
         r.cause === "hours" && r.delta === 0 ? `Средний балл ${r.mean}% ниже цели на ${gap} п.п., но свободные часы ушли темам с бо́льшим отставанием. Следующий кандидат на часы.` :
         r.cause === "hours" && !r.bookChecked ? `Средний балл ${r.mean}% ниже цели ${TARGET}% на ${gap} п.п. Влияние учебника не проверено (мало классов или нет baseline). +${r.delta} ч из тем: ${donorNames || "резерв"}.` :
+        r.cause === "hours" && r.weakBook ? `Средний балл ${r.mean}% ниже цели ${TARGET}% на ${gap} п.п.; ниже цели даже с лучшим учебником — нужны часы, а главу «${r.weakBook}» стоит дополнить. +${r.delta} ч из тем: ${donorNames || "резерв"}.` :
         r.cause === "hours" ? `Средний балл ${r.mean}% ниже цели ${TARGET}% на ${gap} п.п. во всех учебниках — это дефицит времени, а не учебника. +${r.delta} ч из тем: ${donorNames || "резерв"}.` :
         r.cause === "textbook" ? `Отставание ${gap} п.п. объясняется главой «${r.weakBook}»: её классы ниже ожидаемого. Часы не добавляем — заменить/дополнить главу.` :
         r.cause === "surplus" ? (r.delta < 0 ? `Балл ${r.mean}% выше цели на ${r1(-gap)} п.п. Можно отдать ${-r.delta} ч, не опускаясь ниже 75% плана.` : `Балл ${r.mean}% выше цели, запас есть, но часы не потребовались.`) :
@@ -164,6 +169,7 @@ export function hourRecs(stats: TopicStat[], hours: Record<string, number>, cell
         r.cause === "hours" && r.delta === 0 && noReserve ? `Mean ${r.mean}% is ${gap} p.p. below target, but no topic above target has hours to spare. The yearly volume needs review.` :
         r.cause === "hours" && r.delta === 0 ? `Mean ${r.mean}% is ${gap} p.p. below target, but the free hours went to topics with bigger gaps. Next in line for hours.` :
         r.cause === "hours" && !r.bookChecked ? `Mean ${r.mean}% is ${gap} p.p. below the ${TARGET}% target. Textbook influence not checked (too few classes or no baseline). +${r.delta} h taken from: ${donorNames || "reserve"}.` :
+        r.cause === "hours" && r.weakBook ? `Mean ${r.mean}% is ${gap} p.p. below the ${TARGET}% target, even with the best textbook — hours are needed, and the “${r.weakBook}” chapter should be supplemented. +${r.delta} h taken from: ${donorNames || "reserve"}.` :
         r.cause === "hours" ? `Mean ${r.mean}% is ${gap} p.p. below the ${TARGET}% target with every textbook: a time deficit, not a textbook problem. +${r.delta} h taken from: ${donorNames || "reserve"}.` :
         r.cause === "textbook" ? `The ${gap} p.p. gap comes from the “${r.weakBook}” chapter: its classes are below expected. No extra hours: replace or supplement the chapter.` :
         r.cause === "surplus" ? (r.delta < 0 ? `Mean ${r.mean}% is ${r1(-gap)} p.p. above target. Can give ${-r.delta} h, staying at ≥ 75% of plan.` : `Mean ${r.mean}% is above target; hours were not needed.`) :
@@ -173,6 +179,7 @@ export function hourRecs(stats: TopicStat[], hours: Record<string, number>, cell
         r.cause === "hours" && r.delta === 0 && noReserve ? `Орташа балл ${r.mean}%, мақсаттан ${gap} п.п. төмен, бірақ сағат алатын тақырып жоқ. Жылдық көлемді қайта қарау керек.` :
         r.cause === "hours" && r.delta === 0 ? `Орташа балл ${r.mean}%, мақсаттан ${gap} п.п. төмен, бірақ бос сағаттар артта қалуы көбірек тақырыптарға берілді. Келесі кандидат.` :
         r.cause === "hours" && !r.bookChecked ? `Орташа балл ${r.mean}%, мақсаттан (${TARGET}%) ${gap} п.п. төмен. Оқулық әсері тексерілмеген (сынып аз не baseline жоқ). +${r.delta} сағ мына тақырыптардан: ${donorNames || "резерв"}.` :
+        r.cause === "hours" && r.weakBook ? `Орташа балл ${r.mean}%, мақсаттан (${TARGET}%) ${gap} п.п. төмен; үздік оқулықпен де төмен — сағат керек, ал «${r.weakBook}» тарауын толықтыру қажет. +${r.delta} сағ мына тақырыптардан: ${donorNames || "резерв"}.` :
         r.cause === "hours" ? `Орташа балл ${r.mean}%, мақсаттан (${TARGET}%) ${gap} п.п. төмен, барлық оқулықта — бұл уақыт тапшылығы. +${r.delta} сағ мына тақырыптардан: ${donorNames || "резерв"}.` :
         r.cause === "textbook" ? `${gap} п.п. артта қалу «${r.weakBook}» тарауына байланысты. Сағат қоспаймыз — тарауды ауыстыру/толықтыру керек.` :
         r.cause === "surplus" ? (r.delta < 0 ? `Балл ${r.mean}%, мақсаттан ${r1(-gap)} п.п. жоғары. ${-r.delta} сағ беруге болады (жоспардың 75%-нан төмен емес).` : `Балл ${r.mean}% мақсаттан жоғары, сағат қажет болмады.`) :

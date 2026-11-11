@@ -37,6 +37,17 @@ function coder() {
   };
 }
 
+// short headers ("Дроби", "Бөлшектер") → full programme topic names, so imported data lines up with hours and labels
+const PROGRAM: [RegExp, string][] = [
+  [/(степен|дәреже)/i, "Степень с натуральным показателем"], [/(одночлен|бірмүше)/i, "Одночлены"], [/(многочлен|көпмүше)/i, "Многочлены"],
+  [/(сокращ|көбейту формул)/i, "Формулы сокращённого умножения"], [/(разлож|жіктеу)/i, "Разложение на множители"], [/(дроб|бөлшек)/i, "Алгебраические дроби"],
+  [/(функц)/i, "Линейная функция"], [/(систем|жүйе)/i, "Системы линейных уравнений"], [/(уравнен|теңдеу)/i, "Линейные уравнения"], [/(статист)/i, "Элементы статистики"],
+];
+export function programTopic(header: string): string {
+  const hit = PROGRAM.find(([re]) => re.test(header));
+  return hit ? hit[1] : header;
+}
+
 export function smartMap(raw: Record<string, unknown>[], overrides: Record<string, Mapping["field"]> = {}, hints: Record<string, Mapping["field"]> = {}): SmartResult {
   const columns = [...new Set(raw.flatMap((r) => Object.keys(r)))].filter((c) => !/^__EMPTY/.test(c) || raw.some((r) => r[c] != null && r[c] !== ""));
   const mapping: Mapping[] = columns.map((column) => {
@@ -52,7 +63,8 @@ export function smartMap(raw: Record<string, unknown>[], overrides: Record<strin
   let wide = false;
   if (!has("topic") && !has("score")) {
     const numericCols = mapping.filter((m) => m.field == null && raw.filter((r) => isNum(r[m.column])).length >= raw.length * 0.6);
-    if (numericCols.length >= 2) {
+    // a single numeric column also counts when the entry-level column is already known (e.g. «Дроби» + «Итог прошлого года»)
+    if (numericCols.length >= 2 || (numericCols.length === 1 && has("baseline"))) {
       wide = true;
       for (const m of numericCols) { m.field = "topicColumn"; m.sure = false; }
     }
@@ -80,7 +92,7 @@ export function smartMap(raw: Record<string, unknown>[], overrides: Record<strin
       base[m.field] = v;
     }
     if (wide) {
-      for (const m of mapping.filter((x) => x.field === "topicColumn")) records.push({ ...base, topic: m.column, score: r[m.column] });
+      for (const m of mapping.filter((x) => x.field === "topicColumn")) records.push({ ...base, topic: programTopic(m.column), score: r[m.column] });
     } else records.push(base);
   }
   const present = new Set(mapping.map((m) => (m.field === "topicColumn" ? ["topic", "score"] : [m.field])).flat());
