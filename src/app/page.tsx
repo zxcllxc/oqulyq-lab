@@ -6,6 +6,7 @@ import { classTopics, hourRecs, PASS, TARGET, textbookEffects, topicStats } from
 import { deviationByUnit, earlyWarnings, itemAnalysis, quarterDynamics } from "@/lib/diagnostics";
 import { differenceInDifferences, publisherIssues, remedialWeek, schoolTopicMeans } from "@/lib/wow";
 import { truthCheck, whereIsCause } from "@/lib/cause";
+import { askTemplate, buildFacts, explainTemplate, planTemplate } from "@/lib/explain";
 import { T, type Lang } from "@/lib/i18n";
 import { parseImport, type Quality } from "@/lib/importer";
 import { smartMap, type Mapping } from "@/lib/smartImport";
@@ -39,6 +40,10 @@ export default function Home() {
   const [openAction, setOpenAction] = useState("");
   const [showTruth, setShowTruth] = useState(false);
   const [welcome, setWelcome] = useState(false);
+  const [explainOpen, setExplainOpen] = useState(false);
+  const [askQ, setAskQ] = useState("");
+  const [askA, setAskA] = useState<{ answer: string; refs: string[] } | null>(null);
+  const [planText, setPlanText] = useState<string | null>(null);
   const [rawImport, setRawImport] = useState<Record<string, unknown>[] | null>(null);
   const [overrides, setOverrides] = useState<Record<string, Mapping["field"]>>({});
   const [pasted, setPasted] = useState("");
@@ -121,6 +126,12 @@ export default function Home() {
     return { eff, did, distMean, issues };
   }, [rows, allCts, isDemo, mapTopic]);
   const causes = a.stats.map((st) => whereIsCause(view.cts, a.eff.cells, st.topic, st.mean));
+  const factInput = { stats: a.stats, overall: a.eff.overall, cells: a.eff.cells, recs: a.recs, items: a.items, warns: a.warns, did: w.did, label, fmt };
+  const facts = buildFacts(factInput);
+  const tabFacts = tab === 0 ? facts : facts.filter((f) => f.tab === tab);
+  const explained = explainTemplate(tabFacts);
+  const goFact = (id: string) => { const f = facts.find((x) => x.id === id); if (f) { setTab(f.tab); setExplainOpen(false); window.scrollTo({ top: 0 }); } };
+  const RefChip = ({ id }: { id: string }) => <button onClick={() => goFact(id)} className="ml-1 rounded-sm border border-accent px-1 font-mono text-[11px] text-accent hover:bg-accent hover:text-paper">{id}</button>;
   const truth = isDemo && showTruth ? truthCheck(allCts, w.eff.cells) : null;
 
   const sorted = [...a.stats].sort((x, y) => x.mean - y.mean);
@@ -286,7 +297,26 @@ export default function Home() {
         <span className="mx-2 h-5 w-px shrink-0 bg-line" />
         <span className="mr-1 shrink-0 font-mono text-[11px] uppercase tracking-wider text-muted">{t.groups[1]}</span>
         {[3, 4, 5].map(tabBtn)}
+        <button onClick={() => setExplainOpen(true)} className="ml-auto shrink-0 rounded-full bg-accent px-4 py-1.5 text-sm text-paper">{t.explainBtn}</button>
       </nav>
+      {explainOpen && (
+        <div className="print:hidden fixed inset-0 z-40 flex justify-end bg-ink/30" onClick={() => setExplainOpen(false)}>
+          <aside role="dialog" aria-modal="true" aria-label={t.explainTitle} onClick={(e) => e.stopPropagation()} className="h-full w-full max-w-md overflow-y-auto bg-paper p-5 shadow-xl">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="font-display text-2xl">{t.explainTitle}: {tab === 6 ? t.tab6 : t.tabs[tab]}</h2>
+              <button onClick={() => setExplainOpen(false)} className="text-sm underline">{t.close}</button>
+            </div>
+            <p className="mt-2 rounded-md border-l-4 border-good bg-card p-2 text-sm">{t.trustRule}</p>
+            <p className="mt-1 font-mono text-[11px] text-muted">{t.aiOff}</p>
+            {explained.summary.length > 0 && <h3 className="mt-4 font-medium">{t.whatHappens}</h3>}
+            <ul className="mt-1 grid gap-2 text-[15px]">{explained.summary.map((s, i) => <li key={i}>{s.text}{s.refs.map((r) => <RefChip key={r} id={r} />)}</li>)}</ul>
+            {explained.steps.length > 0 && <h3 className="mt-4 font-medium">{t.thisWeek}</h3>}
+            <ol className="mt-1 grid list-decimal gap-2 pl-5 text-[15px]">{explained.steps.map((s, i) => <li key={i}>{s.text}{s.refs.map((r) => <RefChip key={r} id={r} />)}</li>)}</ol>
+            <h3 className="mt-4 font-medium">{t.facts}</h3>
+            <ul className="mt-1 grid gap-1 text-sm">{tabFacts.map((f) => <li key={f.id}><span className="font-mono text-accent">[{f.id}]</span> {f.text}</li>)}</ul>
+          </aside>
+        </div>
+      )}
 
       {show(0) && (
         <section className="mt-4 grid grid-cols-1 gap-10 [&>*]:min-w-0">
@@ -311,6 +341,16 @@ export default function Home() {
                 </li>
               ))}
             </ol>
+          </div>
+
+          <div className="rounded-md border border-ink p-4">
+            <h2 className="font-display text-2xl">{t.askTitle}</h2>
+            <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setAskA(askTemplate(askQ, facts)); }}>
+              <input name="ask" value={askQ} onChange={(e) => setAskQ(e.target.value)} placeholder={t.askPh} className="min-w-0 flex-1 rounded-md border border-line bg-paper px-3 py-2 text-[15px]" />
+              <button type="submit" className="rounded-full bg-ink px-4 py-1.5 text-sm text-paper">{t.askBtn}</button>
+            </form>
+            <p className="mt-1 font-mono text-[11px] text-muted">{t.aiOff} {t.trustRule}</p>
+            {askA && <div className="mt-3 whitespace-pre-line text-[15px]">{askA.answer}{askA.refs.length > 0 && <div className="mt-1">{askA.refs.map((r) => <RefChip key={r} id={r} />)}</div>}</div>}
           </div>
 
           <div>
@@ -542,8 +582,21 @@ export default function Home() {
               <h2 className="font-display text-2xl">{t.hoursTitle}</h2>
               <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.hoursNote}</p>
             </div>
-            <button onClick={downloadKtp} className="print:hidden rounded-full border border-ink px-4 py-1.5 text-sm hover:bg-ink hover:text-paper">{t.ktp}</button>
+            <div className="print:hidden flex flex-wrap gap-2">
+              <button onClick={() => setPlanText(planTemplate(factInput, Object.values(t.days)))} className="rounded-full bg-accent px-4 py-1.5 text-sm text-paper">{t.planBtn}</button>
+              <button onClick={downloadKtp} className="rounded-full border border-ink px-4 py-1.5 text-sm hover:bg-ink hover:text-paper">{t.ktp}</button>
+            </div>
           </div>
+          {planText != null && (
+            <div className="print:hidden mt-4 rounded-md border border-ink p-4">
+              <h3 className="font-display text-xl">{t.planTitle}</h3>
+              <textarea name="plan" value={planText} onChange={(e) => setPlanText(e.target.value)} rows={14} className="mt-2 w-full rounded-md border border-line bg-paper p-2 font-mono text-xs" />
+              <div className="mt-2 flex gap-2">
+                <button onClick={() => saveDoc("oqulyq-plan.doc", t.planBtn, `<pre style="font-family:'Times New Roman',serif;white-space:pre-wrap">${esc(planText)}</pre>`)} className="rounded-full bg-ink px-4 py-1.5 text-sm text-paper">{t.planDoc}</button>
+                <button onClick={() => setPlanText(null)} className="rounded-full px-4 py-1.5 text-sm hover:bg-line">{t.close}</button>
+              </div>
+            </div>
+          )}
           <div className="mt-4 grid gap-3">
             {a.recs.map((r) => (
               <article key={r.topic} className="grid gap-2 rounded-md border border-line bg-card p-4 sm:grid-cols-[minmax(0,260px)_150px_1fr] sm:gap-6">
