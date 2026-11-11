@@ -222,11 +222,11 @@ export default function Home() {
 
       <div className="print:hidden mt-4 flex flex-wrap items-center gap-2 rounded-md border border-line bg-card px-3 py-2 text-sm">
         <span className="text-muted">{t.role}</span>
-        <select value={role} onChange={(e) => changeRole(e.target.value as Role)} className="rounded-sm border border-line bg-paper px-2 py-1" aria-label={t.role}>
+        <select name="role" value={role} onChange={(e) => changeRole(e.target.value as Role)} className="rounded-sm border border-line bg-paper px-2 py-1" aria-label={t.role}>
           {(Object.keys(t.roles) as Role[]).map((r) => <option key={r} value={r}>{t.roles[r]}</option>)}
         </select>
         {scopeOptions.length > 0 && (
-          <select value={scope} onChange={(e) => setScope(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1" aria-label="scope">
+          <select name="scope" value={scope} onChange={(e) => setScope(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1" aria-label="scope">
             {scopeOptions.map((s) => <option key={s} value={s}>{role === "district" ? distLabel(s) : s}</option>)}
           </select>
         )}
@@ -270,7 +270,7 @@ export default function Home() {
           <div>
             <div className="flex flex-wrap items-end justify-between gap-3">
               <h2 className="font-display text-2xl">{t.mapTitle}</h2>
-              <select value={mapTopic} onChange={(e) => setMapTopic(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1 text-sm" aria-label={t.topics}>
+              <select name="map-topic" value={mapTopic} onChange={(e) => setMapTopic(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1 text-sm" aria-label={t.topics}>
                 <option value="">{t.allTopics}</option>
                 {a.topics.map((tp) => <option key={tp} value={tp}>{label(tp)}</option>)}
               </select>
@@ -317,7 +317,7 @@ export default function Home() {
               {sorted.map((s) => (
                 <li key={s.topic} className="grid gap-1 sm:grid-cols-[minmax(0,300px)_1fr_120px] sm:items-center sm:gap-4">
                   <span className="text-[15px]">
-                    {label(s.topic)} {s.difficult && <span className="ml-1 rounded-sm bg-bad/10 px-1.5 py-0.5 font-mono text-[11px] text-bad">{t.difficult}</span>}
+                    {label(s.topic)} {s.difficult && <span className="ml-1 rounded-sm bg-bad px-1.5 py-0.5 font-mono text-[11px] text-paper">{t.difficult}</span>}
                   </span>
                   <div className="relative h-5 rounded-sm bg-line/60">
                     <div className="absolute inset-y-0 left-0 rounded-sm bg-ink/20" style={{ width: `${s.mastery}%` }} />
@@ -348,11 +348,11 @@ export default function Home() {
             <p className="mt-2 text-sm text-muted">{t.heatSchoolNote}</p>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[720px] border-separate border-spacing-[2px] text-xs">
-                <thead><tr><th className="text-left font-normal text-muted" />{a.topics.map((tp, i) => <th key={tp} title={label(tp)} className="w-12 font-mono font-normal text-muted">T{i + 1}</th>)}</tr></thead>
+                <thead><tr><th scope="col" className="text-left font-normal text-muted" />{a.topics.map((tp, i) => <th scope="col" key={tp} title={label(tp)} className="w-12 font-mono font-normal text-muted">T{i + 1}</th>)}</tr></thead>
                 <tbody>
                   {a.units.map((u) => (
                     <tr key={u}>
-                      <td className="pr-2 text-[13px] whitespace-nowrap">{scope === "all" ? distLabel(u) : u}</td>
+                      <th scope="row" className="pr-2 text-left text-[13px] font-normal whitespace-nowrap">{scope === "all" ? distLabel(u) : u}</th>
                       {a.topics.map((tp) => {
                         const v = a.heat(u, tp);
                         const alpha = v == null ? 0 : Math.max(0.06, Math.min(1, (90 - v) / 50));
@@ -431,7 +431,7 @@ export default function Home() {
                         <td className="py-2 pr-3">{label(tp.name)}</td>
                         {BOOKS.map((b) => {
                           const pages = COVERAGE[b][i];
-                          return <td key={b} className="px-2 text-center font-mono tabular-nums">{pages === 0 ? <span className="rounded-sm bg-bad/15 px-2 py-0.5 text-bad">{t.gap}</span> : <span className={pages < 10 ? "text-bad" : ""}>{pages}</span>}</td>;
+                          return <td key={b} className="px-2 text-center font-mono tabular-nums">{pages === 0 ? <span className="rounded-sm bg-bad px-2 py-0.5 text-paper">{t.gap}</span> : <span className={pages < 10 ? "text-bad" : ""}>{pages}</span>}</td>;
                         })}
                       </tr>
                     ))}
@@ -473,7 +473,7 @@ export default function Home() {
               <article key={r.topic} className="grid gap-2 rounded-md border border-line bg-card p-4 sm:grid-cols-[minmax(0,260px)_150px_1fr] sm:gap-6">
                 <div>
                   <div className="font-medium">{label(r.topic)}</div>
-                  <span className={`mt-1 inline-block rounded-sm px-1.5 py-0.5 font-mono text-[11px] ${r.cause === "hours" ? "bg-accent text-paper" : r.cause === "textbook" ? "bg-bad/10 text-bad" : "bg-line text-muted"}`}>{t.cause[r.cause]}</span>
+                  <span className={`mt-1 inline-block rounded-sm px-1.5 py-0.5 font-mono text-[11px] ${r.cause === "hours" ? "bg-accent text-paper" : r.cause === "textbook" ? "bg-bad text-paper" : "bg-line text-muted"}`}>{t.cause[r.cause]}</span>
                 </div>
                 <div className="font-mono tabular-nums">
                   <span className="text-muted">{r.plan}</span> → <span className="text-xl">{r.rec}</span>{" "}
@@ -485,10 +485,10 @@ export default function Home() {
             <div className="print:hidden rounded-md border border-ink p-4">
               <h3 className="font-display text-xl">{t.whatIf}</h3>
               <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-                <select value={wiTopic || sorted[0]?.topic} onChange={(e) => setWiTopic(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1" aria-label={t.topics}>
+                <select name="whatif-topic" value={wiTopic || sorted[0]?.topic} onChange={(e) => setWiTopic(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1" aria-label={t.topics}>
                   {a.stats.map((s) => <option key={s.topic} value={s.topic}>{label(s.topic)}</option>)}
                 </select>
-                <input type="range" min={-3} max={4} value={wiDelta} onChange={(e) => setWiDelta(Number(e.target.value))} aria-label={t.h} />
+                <input name="whatif-hours" type="range" min={-3} max={4} value={wiDelta} onChange={(e) => setWiDelta(Number(e.target.value))} aria-label={t.h} />
                 <span className="font-mono">{wiDelta > 0 ? "+" : ""}{wiDelta} {t.h}</span>
               </div>
               {(() => {
@@ -542,7 +542,7 @@ export default function Home() {
             <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.moneyNote}</p>
             <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
               <span className="text-muted">{t.district}</span>
-              <select value={simD} onChange={(e) => setSimDistrict(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1" aria-label={t.district}>
+              <select name="sim-district" value={simD} onChange={(e) => setSimDistrict(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1" aria-label={t.district}>
                 {districts.map((d) => <option key={d} value={d}>{distLabel(d)}</option>)}
               </select>
               <span className="font-mono">{simStudents} {t.studentsN}</span>
@@ -600,7 +600,7 @@ export default function Home() {
                         </div>
                       </td>
                       <td className="text-[13px]">
-                        {it.flags.map((f) => <span key={f} className={`mr-1 inline-block rounded-sm px-1.5 py-0.5 font-mono text-[11px] ${f === "bad" ? "bg-bad text-paper" : "bg-bad/10 text-bad"}`}>{t.flags[f]}</span>)}
+                        {it.flags.map((f) => <span key={f} className={`mr-1 inline-block rounded-sm px-1.5 py-0.5 font-mono text-[11px] ${f === "bad" ? "bg-bad text-paper" : "border border-bad text-bad"}`}>{t.flags[f]}</span>)}
                         {it.trap && <div className="mt-1 text-muted">{t.trapText(it.trap)}</div>}
                       </td>
                     </tr>
@@ -683,7 +683,7 @@ export default function Home() {
             <label className="mt-4 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-ink/30 p-8 text-center hover:border-ink">
               <span className="font-mono text-sm">.csv · .xlsx</span>
               <span className="text-sm">{t.upload}</span>
-              <input type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
+              <input name="import-file" type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
             </label>
             {err && <p className="mt-2 text-sm text-bad" role="alert">{err}</p>}
             {quality && (
