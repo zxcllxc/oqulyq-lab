@@ -137,11 +137,13 @@ export function hourRecs(stats: TopicStat[], hours: Record<string, number>, cell
     progress = false;
     for (const d of donors) if (given > 0 && d.rec - 1 >= floorOf(d)) { d.rec--; d.delta--; given--; progress = true; }
   }
+  const noReserve = donors.reduce((s, d) => s + Math.max(0, Math.floor(d.plan - floorOf(d))), 0) === 0;
   const donorNames = donors.filter((d) => d.delta < 0).map((d) => `«${label(d.topic)}» (${d.mean}%)`).join(", ");
   for (const r of recs) {
     const gap = r1(TARGET - r.mean);
     if (lang === "ru") {
       r.why =
+        r.cause === "hours" && r.delta === 0 && noReserve ? `Средний балл ${r.mean}% ниже цели на ${gap} п.п., но взять часы не у кого: нет тем выше цели с запасом. Нужен пересмотр годового объёма.` :
         r.cause === "hours" && r.delta === 0 ? `Средний балл ${r.mean}% ниже цели на ${gap} п.п., но свободные часы ушли темам с бо́льшим отставанием. Следующий кандидат на часы.` :
         r.cause === "hours" && !r.bookChecked ? `Средний балл ${r.mean}% ниже цели ${TARGET}% на ${gap} п.п. Влияние учебника не проверено (мало классов или нет baseline). +${r.delta} ч из тем: ${donorNames || "резерв"}.` :
         r.cause === "hours" ? `Средний балл ${r.mean}% ниже цели ${TARGET}% на ${gap} п.п. во всех учебниках — это дефицит времени, а не учебника. +${r.delta} ч из тем: ${donorNames || "резерв"}.` :
@@ -150,6 +152,7 @@ export function hourRecs(stats: TopicStat[], hours: Record<string, number>, cell
         `Балл ${r.mean}% около цели — оставить как есть.`;
     } else if (lang === "en") {
       r.why =
+        r.cause === "hours" && r.delta === 0 && noReserve ? `Mean ${r.mean}% is ${gap} p.p. below target, but no topic above target has hours to spare. The yearly volume needs review.` :
         r.cause === "hours" && r.delta === 0 ? `Mean ${r.mean}% is ${gap} p.p. below target, but the free hours went to topics with bigger gaps. Next in line for hours.` :
         r.cause === "hours" && !r.bookChecked ? `Mean ${r.mean}% is ${gap} p.p. below the ${TARGET}% target. Textbook influence not checked (too few classes or no baseline). +${r.delta} h taken from: ${donorNames || "reserve"}.` :
         r.cause === "hours" ? `Mean ${r.mean}% is ${gap} p.p. below the ${TARGET}% target with every textbook: a time deficit, not a textbook problem. +${r.delta} h taken from: ${donorNames || "reserve"}.` :
@@ -158,6 +161,7 @@ export function hourRecs(stats: TopicStat[], hours: Record<string, number>, cell
         `Mean ${r.mean}% is near target — keep as is.`;
     } else {
       r.why =
+        r.cause === "hours" && r.delta === 0 && noReserve ? `Орташа балл ${r.mean}%, мақсаттан ${gap} п.п. төмен, бірақ сағат алатын тақырып жоқ. Жылдық көлемді қайта қарау керек.` :
         r.cause === "hours" && r.delta === 0 ? `Орташа балл ${r.mean}%, мақсаттан ${gap} п.п. төмен, бірақ бос сағаттар артта қалуы көбірек тақырыптарға берілді. Келесі кандидат.` :
         r.cause === "hours" && !r.bookChecked ? `Орташа балл ${r.mean}%, мақсаттан (${TARGET}%) ${gap} п.п. төмен. Оқулық әсері тексерілмеген (сынып аз не baseline жоқ). +${r.delta} сағ мына тақырыптардан: ${donorNames || "резерв"}.` :
         r.cause === "hours" ? `Орташа балл ${r.mean}%, мақсаттан (${TARGET}%) ${gap} п.п. төмен, барлық оқулықта — бұл уақыт тапшылығы. +${r.delta} сағ мына тақырыптардан: ${donorNames || "резерв"}.` :

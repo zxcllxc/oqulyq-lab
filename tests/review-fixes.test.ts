@@ -39,8 +39,11 @@ test("#2 without baseline variation there are no better/worse verdicts", () => {
 
 test("#3 missing or invalid baseline is counted as imputed; 0 is valid", () => {
   const base = { school: "S", class: "7A", textbook: "X", topic: "T", score: 50 };
-  const { quality, rows } = parseImport([{ ...base, baseline: "" }, { ...base, baseline: "abc" }, { ...base, baseline: 0 }, { ...base, baseline: 70 }]);
+  // 2 of 10 imputed = 20%: still adjusted (the >20% rule is tested separately)
+  const valid = Array.from({ length: 7 }, (_, i) => ({ ...base, baseline: 50 + i }));
+  const { quality, rows } = parseImport([{ ...base, baseline: "" }, { ...base, baseline: "abc" }, { ...base, baseline: 0 }, ...valid]);
   assert.equal(quality.imputedBaseline, 2);
+  assert.equal(quality.noBaseline, false);
   assert.equal(rows[2].baseline, 0);
 });
 
@@ -76,4 +79,32 @@ test("#11/#12 items: all-correct item is not 'bad'; tiny samples get no flags", 
   assert.ok(!itemAnalysis(all, ["A"])[0].flags.includes("bad"));
   const tiny: Response[] = [0, 1, 2].map((i) => ({ school: "S", cls: "7A", student: i, item: 0, answer: i === 0 ? "B" : "A", correct: i !== 0, total: 3 - i }));
   assert.deepEqual(itemAnalysis(tiny, ["A"])[0].flags, []);
+});
+
+test("round 2 A: early warning still fires when each textbook has one class (leave-one-out)", async () => {
+  const { earlyWarnings } = await import("../src/lib/diagnostics");
+  const rows: Row[] = [];
+  const books = ["X", "Y", "Z"];
+  for (let c = 0; c < 3; c++)
+    for (let q = 1; q <= 4; q++)
+      for (const tp of ["T1", "T2", "T3"]) {
+        const drop = c === 0 && q >= 3 ? -10 : 0;
+        const base = 55 + c * 5;
+        for (let s = 0; s < 10; s++) rows.push({ district: "D", school: `S${c}`, cls: "7A", textbook: books[c], topic: `${tp}q${q}`, quarter: q, score: base + drop + ((s + q + tp.length) % 3) - 1, baseline: base });
+      }
+  const w = earlyWarnings(classTopics(rows));
+  assert.ok(w.some((x) => x.school === "S0"), JSON.stringify(w));
+});
+
+test("round 2 C: no donors at all → honest 'no reserve' text", () => {
+  const recs = hourRecs([stat("A", 50), stat("C", 85)], { A: 6, C: 3 }, [], "ru", (x) => x);
+  assert.equal(recs[0].delta, 0);
+  assert.match(recs[0].why, /взять часы не у кого/);
+});
+
+test("round 2 D: >20% imputed baselines switch the fair comparison off", () => {
+  const base = { school: "S", class: "7A", textbook: "X", topic: "T", score: 50 };
+  const { quality, rows } = parseImport([{ ...base, baseline: "" }, { ...base, baseline: "" }, { ...base, baseline: 70 }, { ...base, baseline: 80 }]);
+  assert.equal(quality.noBaseline, true);
+  assert.ok(rows.every((r) => r.baseline === 60));
 });

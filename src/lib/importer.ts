@@ -42,5 +42,8 @@ export function parseImport(records: Record<string, unknown>[]): { rows: Row[]; 
       score, baseline: bOk ? b : 60,
     });
   }
-  return { rows, quality: { total: lower.length, ok: rows.length, rejected, noBaseline: !cols.has("baseline"), imputedBaseline }, hours };
+  // more than 20% guessed baselines: the adjustment would be mostly made up, so switch it off honestly
+  const tooManyImputed = rows.length > 0 && imputedBaseline / rows.length > 0.2;
+  if (tooManyImputed) for (const r of rows) r.baseline = 60;
+  return { rows, quality: { total: lower.length, ok: rows.length, rejected, noBaseline: !cols.has("baseline") || tooManyImputed, imputedBaseline }, hours };
 }

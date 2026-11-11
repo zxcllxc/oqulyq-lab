@@ -64,9 +64,14 @@ export type Warning = { key: string; district: string; school: string; cls: stri
 export function earlyWarnings(cts: ClassTopic[]): Warning[] {
   const { resid: raw } = fairModel(cts);
   // remove the topic×textbook chapter effect: a weak Q3–Q4 chapter is a textbook problem, not a class sliding
-  const cell = new Map<string, number[]>();
-  for (const r of raw) cell.set(`${r.topic}|${r.textbook}`, [...(cell.get(`${r.topic}|${r.textbook}`) ?? []), r.resid]);
-  const resid = raw.map((r) => ({ ...r, resid: r.resid - mean(cell.get(`${r.topic}|${r.textbook}`)!) }));
+  // leave-one-out: the class itself is not part of "its chapter's" effect; with < 3 other classes the chapter effect is unknown, not subtracted
+  const cell = new Map<string, { sum: number; n: number }>();
+  for (const r of raw) { const k = `${r.topic}|${r.textbook}`; const c = cell.get(k) ?? { sum: 0, n: 0 }; c.sum += r.resid; c.n++; cell.set(k, c); }
+  const resid = raw.map((r) => {
+    const c = cell.get(`${r.topic}|${r.textbook}`)!;
+    const others = c.n - 1;
+    return { ...r, resid: others >= 3 ? r.resid - (c.sum - r.resid) / others : r.resid };
+  });
   const byClass = new Map<string, typeof resid>();
   for (const r of resid) byClass.set(r.key, [...(byClass.get(r.key) ?? []), r]);
   const out: Warning[] = [];
