@@ -43,3 +43,13 @@ test("quarter dynamics returns 4 quarters", () => {
   const q = quarterDynamics(classTopics(demo.rows));
   assert.deepEqual(q.map((x) => x.quarter), [1, 2, 3, 4]);
 });
+
+test("deviation by unit: regional model, a sliding class shows a negative Q3–Q4", async () => {
+  const { deviationByUnit, earlyWarnings } = await import("../src/lib/diagnostics");
+  const cts = classTopics(demo.rows);
+  const w = earlyWarnings(cts)[0];
+  const rows = deviationByUnit(cts, (c) => c.key, (c) => c.key === w.key);
+  assert.equal(rows.length, 1);
+  const [q1, q2, q3, q4] = rows[0].q as number[];
+  assert.ok((q3 + q4) / 2 < (q1 + q2) / 2, JSON.stringify(rows[0]));
+});

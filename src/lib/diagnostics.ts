@@ -99,3 +99,22 @@ export function quarterDynamics(cts: ClassTopic[]) {
     return { quarter: q, mean: Math.round(mean(rs.map((c) => c.mean)) * 10) / 10, resid: Math.round(mean(resid.filter((r) => r.quarter === q).map((r) => r.resid)) * 10) / 10, n: rs.length };
   });
 }
+
+/**
+ * Deviation from expected by unit × quarter. The model is fitted on ALL classes (the region), so a district,
+ * school or class is compared with the regional expectation for its entry level. (Inside one scope the mean
+ * residual is zero by construction, which is why a single overall line would always read 0.)
+ */
+export function deviationByUnit(allCts: ClassTopic[], unitOf: (c: ClassTopic) => string, include: (c: ClassTopic) => boolean) {
+  const { resid } = fairModel(allCts);
+  const acc = new Map<string, { sum: number[]; n: number[] }>();
+  for (const r of resid) {
+    if (!include(r)) continue;
+    const u = unitOf(r);
+    const a = acc.get(u) ?? { sum: [0, 0, 0, 0], n: [0, 0, 0, 0] };
+    a.sum[r.quarter - 1] += r.resid;
+    a.n[r.quarter - 1]++;
+    acc.set(u, a);
+  }
+  return [...acc.entries()].map(([unit, a]) => ({ unit, q: a.sum.map((s, i) => (a.n[i] ? Math.round((s / a.n[i]) * 10) / 10 : null)) }));
+}

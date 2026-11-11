@@ -105,6 +105,7 @@ test("round 2 C: no donors at all → honest 'no reserve' text", () => {
 test("round 2 D: >20% imputed baselines switch the fair comparison off", () => {
   const base = { school: "S", class: "7A", textbook: "X", topic: "T", score: 50 };
   const { quality, rows } = parseImport([{ ...base, baseline: "" }, { ...base, baseline: "" }, { ...base, baseline: 70 }, { ...base, baseline: 80 }]);
-  assert.equal(quality.noBaseline, true);
+  assert.equal(quality.tooManyImputed, true);
+  assert.equal(quality.noBaseline, false);
   assert.ok(rows.every((r) => r.baseline === 60));
 });

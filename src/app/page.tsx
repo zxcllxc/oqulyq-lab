@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
 import { BOOKS, COVERAGE, DISTRICTS, generateDemo, ITEMS, ITEM_TOPIC, TOPICS, type Response, type Row } from "@/lib/data";
 import { classTopics, hourRecs, PASS, TARGET, textbookEffects, topicStats } from "@/lib/analytics";
-import { earlyWarnings, itemAnalysis, quarterDynamics } from "@/lib/diagnostics";
+import { deviationByUnit, earlyWarnings, itemAnalysis, quarterDynamics } from "@/lib/diagnostics";
 import { T, type Lang } from "@/lib/i18n";
 import { parseImport, type Quality } from "@/lib/importer";
 
@@ -66,6 +66,7 @@ export default function Home() {
     return { rs, resp };
   }, [rows, responses, role, scope]);
 
+  const allCts = useMemo(() => classTopics(rows), [rows]);
   const a = useMemo(() => {
     const { rs, resp } = view;
     const topics = TOPICS.map((x) => x.name).filter((n) => rs.some((r) => r.topic === n)).concat([...new Set(rs.map((r) => r.topic))].filter((n) => !TOPIC_BY_NAME[n]));
@@ -76,6 +77,10 @@ export default function Home() {
     const items = resp.length ? itemAnalysis(resp, KEYS) : [];
     const warns = earlyWarnings(cts);
     const dyn = quarterDynamics(cts);
+    // deviation vs the REGIONAL model, by district (region) / school (district) / class (school)
+    const unitCt = (c: { district: string; school: string; cls: string }) => (scope === "all" ? c.district : role === "district" ? c.school : `${c.cls}`);
+    const inScopeCt = (c: { district: string; school: string }) => scope === "all" || (role === "district" ? c.district === scope : c.school === scope);
+    const dev = deviationByUnit(allCts, unitCt, inScopeCt).sort((x, y) => (x.q[2] ?? 0) + (x.q[3] ?? 0) - (y.q[2] ?? 0) - (y.q[3] ?? 0));
     // heatmap unit follows the level: region → districts, district → schools, school → classes
     const unitOf = (r: Row) => (scope === "all" ? r.district : role === "district" ? r.school : r.cls);
     const units = [...new Set(rs.map(unitOf))];
@@ -83,13 +88,13 @@ export default function Home() {
     for (const r of rs) { const k = `${unitOf(r)}|${r.topic}`; const c = cell.get(k) ?? [0, 0]; c[0] += r.score; c[1]++; cell.set(k, c); }
     const heat = (u: string, tp: string) => { const c = cell.get(`${u}|${tp}`); return c ? Math.round(c[0] / c[1]) : null; };
     return {
-      topics, stats, eff, recs, items, warns, dyn, units, heat,
+      topics, stats, eff, recs, items, warns, dyn, dev, units, heat,
       schools: new Set(rs.map((r) => r.school)).size,
       classes: new Set(rs.map((r) => `${r.school}|${r.cls}`)).size,
     };
     // label depends only on lang
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, hours, lang, role, scope]);
+  }, [view, allCts, hours, lang, role, scope]);
 
   const sorted = [...a.stats].sort((x, y) => x.mean - y.mean);
   const naiveBest = [...a.eff.overall].sort((x, y) => y.naive - x.naive)[0];
@@ -450,21 +455,23 @@ export default function Home() {
                 </div>
                 <div className="mt-1 flex gap-3">{a.dyn.map((d) => <span key={d.quarter} className="flex-1 text-center font-mono text-xs text-muted">{t.quarter} {d.quarter}</span>)}</div>
               </div>
-              <div>
+              <div className="min-w-0">
                 <h3 className="text-sm text-muted">{t.devTitle}</h3>
-                <div className="relative mt-2 flex h-40 items-center gap-3">
-                  <div className="absolute inset-x-0 top-1/2 h-px bg-ink" />
-                  {a.dyn.map((d) => {
-                    const h = Math.min(70, Math.abs(d.resid) * 14);
-                    return (
-                      <div key={d.quarter} className="relative flex h-full flex-1 flex-col items-center">
-                        <div className={`absolute w-full rounded-sm ${d.resid >= 0 ? "bg-good" : "bg-bad"}`} style={d.resid >= 0 ? { bottom: "50%", height: h } : { top: "50%", height: h }} />
-                        <span className="absolute font-mono text-xs tabular-nums" style={d.resid >= 0 ? { bottom: `calc(50% + ${h + 2}px)` } : { top: `calc(50% + ${h + 2}px)` }}>{d.n ? fmt(d.resid) : "—"}</span>
-                      </div>
-                    );
-                  })}
+                <div className="mt-2 max-h-64 overflow-auto">
+                  <table className="w-full text-sm">
+                    <thead><tr className="text-muted"><th className="text-left font-normal" />{[1, 2, 3, 4].map((q) => <th key={q} className="w-14 font-mono font-normal">Q{q}</th>)}</tr></thead>
+                    <tbody>
+                      {a.dev.map((r) => (
+                        <tr key={r.unit} className="border-b border-line">
+                          <td className="py-1 pr-2 text-[13px] whitespace-nowrap">{scope === "all" ? distLabel(r.unit) : r.unit}</td>
+                          {r.q.map((v, i) => (
+                            <td key={i} className={`text-center font-mono text-xs tabular-nums ${v == null ? "text-muted" : v <= -3 ? "bg-bad/20 text-bad" : v >= 3 ? "bg-good/15 text-good" : ""}`}>{v == null ? "—" : fmt(v)}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                <div className="mt-1 flex gap-3">{a.dyn.map((d) => <span key={d.quarter} className="flex-1 text-center font-mono text-xs text-muted">{t.quarter} {d.quarter}</span>)}</div>
               </div>
             </div>
           </div>
@@ -509,7 +516,8 @@ export default function Home() {
                 <p className="mt-1 font-mono">{quality.ok} / {quality.total} {t.accepted}</p>
                 {Object.entries(quality.rejected).filter(([, n]) => n > 0).map(([k, n]) => <p key={k} className="font-mono text-bad">{t.rejectedRows}: {n} — {t.reasons[k as keyof typeof t.reasons]}</p>)}
                 {quality.noBaseline && <p className="mt-1 text-bad">{t.noBaseline}</p>}
-                {!quality.noBaseline && quality.imputedBaseline > 0 && <p className="mt-1 text-bad">{t.imputed(quality.imputedBaseline)}</p>}
+                {!quality.noBaseline && quality.tooManyImputed && <p className="mt-1 text-bad">{t.tooManyImputed(quality.imputedBaseline)}</p>}
+                {!quality.noBaseline && !quality.tooManyImputed && quality.imputedBaseline > 0 && <p className="mt-1 text-bad">{t.imputed(quality.imputedBaseline)}</p>}
               </div>
             )}
             <div className="mt-4 flex flex-wrap gap-2">
