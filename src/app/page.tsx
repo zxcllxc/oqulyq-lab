@@ -8,6 +8,7 @@ import { differenceInDifferences, publisherIssues, remedialWeek, schoolTopicMean
 import { truthCheck, whereIsCause } from "@/lib/cause";
 import { askTemplate, buildFacts, explainTemplate, planTemplate } from "@/lib/explain";
 import { estimateHoursEffect, forecast, hoursToClose } from "@/lib/hoursEffect";
+import { displayName } from "@/lib/names";
 import { T, type Lang } from "@/lib/i18n";
 import { parseImport, type Quality } from "@/lib/importer";
 import { smartMap, type Mapping } from "@/lib/smartImport";
@@ -75,7 +76,8 @@ export default function Home() {
   const t = T[lang];
   const show = (i: number) => tab === i || all;
   const label = (topic: string) => (lang === "kk" ? TOPIC_BY_NAME[topic]?.kk : lang === "en" ? TOPIC_BY_NAME[topic]?.en : undefined) || topic;
-  const distLabel = (d: string) => (lang === "kk" && DISTRICTS.find((x) => x.name === d)?.kk) || d;
+  const nm = (s: string) => displayName(s, lang);
+  const distLabel = (d: string) => (lang === "kk" ? DISTRICTS.find((x) => x.name === d)?.kk : lang === "en" ? DISTRICTS.find((x) => x.name === d)?.en : undefined) || d;
 
   useEffect(() => {
     try {
@@ -151,11 +153,11 @@ export default function Home() {
   }, [rows, allCts, isDemo, mapTopic]);
   const hoursModel = useMemo(() => estimateHoursEffect(rows, allCts, hours), [rows, allCts, hours]);
   const causes = a.stats.map((st) => whereIsCause(view.cts, a.eff.cells, st.topic, st.mean));
-  const factInput = { stats: a.stats, overall: a.eff.overall, cells: a.eff.cells, recs: a.recs, items: a.items, warns: a.warns, did: w.did, label, fmt };
+  const factInput = { stats: a.stats, overall: a.eff.overall, cells: a.eff.cells, recs: a.recs, items: a.items, warns: a.warns, did: w.did, label, fmt, lang, name: nm };
   const facts = buildFacts(factInput);
   const ownFacts = facts.filter((f) => f.tab === tab);
   const tabFacts = tab === 0 || ownFacts.length === 0 ? facts : ownFacts; // a tab without its own facts gets the overall picture
-  const explained = explainTemplate(tabFacts);
+  const explained = explainTemplate(tabFacts, lang);
   const goFact = (id: string) => { const f = facts.find((x) => x.id === id); if (f) { setTab(f.tab); setExplainOpen(false); window.scrollTo({ top: 0 }); } };
   const withChips = (text: string) => text.split(/(\[[A-Z]+\d+\])/g).map((part, i) => {
     const m = part.match(/^\[([A-Z]+\d+)\]$/);
@@ -318,7 +320,7 @@ export default function Home() {
         </select>
         {scopeOptions.length > 0 && (
           <select name="scope" value={scope} onChange={(e) => setScope(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1" aria-label="scope">
-            {scopeOptions.map((s) => <option key={s} value={s}>{role === "district" ? distLabel(s) : s}</option>)}
+            {scopeOptions.map((s) => <option key={s} value={s}>{role === "district" ? distLabel(s) : nm(s)}</option>)}
           </select>
         )}
         {scope === "all" && <span className="font-medium">{t.allRegion}</span>}
@@ -372,7 +374,7 @@ export default function Home() {
               {findings.map((f, i) => (
                 <li key={i} className="flex gap-3 rounded-md border border-line bg-card p-4 text-[15px] leading-snug">
                   <span className="font-mono text-accent">0{i + 1}</span>
-                  <span className="flex-1">{f.text}</span>
+                  <span className="flex-1">{nm(f.text)}</span>
                   {f.tab !== 0 && <button onClick={() => { setTab(f.tab); window.scrollTo({ top: 0 }); }} className="print:hidden self-start whitespace-nowrap text-sm text-accent underline underline-offset-2">{t.open} →</button>}
                 </li>
               ))}
@@ -381,7 +383,7 @@ export default function Home() {
 
           <div className="rounded-md border border-ink p-4">
             <h2 className="font-display text-2xl">{t.askTitle}</h2>
-            <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setAskA(askTemplate(askQ, facts)); setAiAsk({ status: "loading" }); callAi("ask", facts, askQ).then(setAiAsk); }}>
+            <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setAskA(askTemplate(askQ, facts, lang)); setAiAsk({ status: "loading" }); callAi("ask", facts, askQ).then(setAiAsk); }}>
               <input name="ask" value={askQ} onChange={(e) => setAskQ(e.target.value)} placeholder={t.askPh} className="min-w-0 flex-1 rounded-md border border-line bg-paper px-3 py-2 text-[15px]" />
               <button type="submit" className="rounded-full bg-ink px-4 py-1.5 text-sm text-paper">{t.askBtn}</button>
             </form>
@@ -420,7 +422,7 @@ export default function Home() {
                     return (
                       <g key={d}>
                         {sh.d ? <path d={sh.d} {...props} /> : <circle cx={sh.c![0]} cy={sh.c![1]} r={sh.c![2]} {...props} />}
-                        <text x={sh.lx} y={sh.ly} textAnchor="middle" className="pointer-events-none fill-current font-mono text-[11px]">{distLabel(d).replace(" район", "").replace(" ауданы", "")} {v ?? "—"}%</text>
+                        <text x={sh.lx} y={sh.ly} textAnchor="middle" className="pointer-events-none fill-current font-mono text-[11px]">{distLabel(d).replace(" район", "").replace(" ауданы", "").replace(" district", "")} {v ?? "—"}%</text>
                       </g>
                     );
                   })}
@@ -475,7 +477,7 @@ export default function Home() {
                 <tbody>
                   {a.units.map((u) => (
                     <tr key={u}>
-                      <th scope="row" className="pr-2 text-left text-[13px] font-normal whitespace-nowrap">{scope === "all" ? distLabel(u) : u}</th>
+                      <th scope="row" className="pr-2 text-left text-[13px] font-normal whitespace-nowrap">{scope === "all" ? distLabel(u) : nm(u)}</th>
                       {a.topics.map((tp) => {
                         const v = a.heat(u, tp);
                         const alpha = v == null ? 0 : Math.max(0.06, Math.min(1, (90 - v) / 50));
@@ -493,7 +495,7 @@ export default function Home() {
 
       {show(1) && (
         <section className="mt-4 grid grid-cols-1 gap-10 [&>*]:min-w-0">
-          {naiveBest && <p className="mt-1 rounded-md border-l-4 border-accent bg-card px-3 py-2 text-[15px] font-medium">{t.keyBooks(naiveBest.textbook, String(naiveBest.naive), fmt(naiveBest.effect))}</p>}
+          {naiveBest && <p className="mt-1 rounded-md border-l-4 border-accent bg-card px-3 py-2 text-[15px] font-medium">{t.keyBooks(nm(naiveBest.textbook), String(naiveBest.naive), fmt(naiveBest.effect))}</p>}
           <div>
             <h2 className="font-display text-2xl">{t.causeTitle}</h2>
             <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.causeNote}</p>
@@ -514,8 +516,8 @@ export default function Home() {
                       <div className="mt-1 font-mono text-[11px] text-muted">{t.shareLabels[0]} {c.shares.textbook}% · {t.shareLabels[1]} {c.shares.school}% · {t.shareLabels[2]} {c.shares.class}%</div>
                     </div>
                     <div className="text-[15px] leading-snug">
-                      <p>{text}</p>
-                      {(c.level === "program" || c.level === "textbook") && c.worst && <p className="mt-1 text-sm text-muted">{t.causeText.local(c.worst.cls, c.worst.school, fmt(c.worst.resid))}</p>}
+                      <p>{nm(text)}</p>
+                      {(c.level === "program" || c.level === "textbook") && c.worst && <p className="mt-1 text-sm text-muted">{nm(t.causeText.local(c.worst.cls, c.worst.school, fmt(c.worst.resid)))}</p>}
                     </div>
                   </li>
                 );
@@ -533,7 +535,7 @@ export default function Home() {
                 <tbody>
                   {a.eff.overall.map((e) => (
                     <tr key={e.textbook} className="border-b border-line">
-                      <td className="py-3 pr-3 font-medium">{e.textbook}<div className="font-mono text-xs font-normal text-muted">k = {e.k} ({t.k})</div></td>
+                      <td className="py-3 pr-3 font-medium">{nm(e.textbook)}<div className="font-mono text-xs font-normal text-muted">k = {e.k} ({t.k})</div></td>
                       <td className="pr-3 font-mono tabular-nums">{e.baseline}%</td>
                       <td className="pr-3 font-mono tabular-nums">{e.naive}%</td>
                       <td className="pr-3 font-mono tabular-nums">{fmt(e.effect)} <span className="text-muted">[{fmt(e.lo)}; {fmt(e.hi)}]</span></td>
@@ -549,7 +551,7 @@ export default function Home() {
             <p className="mt-2 text-sm text-muted">{t.heatNote}</p>
             <div className="mt-4 overflow-x-auto">
               <table className="w-full min-w-[560px] text-sm">
-                <thead><tr className="border-b border-ink text-muted"><th className="py-2 text-left font-normal">{t.topics}</th>{a.eff.books.map((b) => <th key={b} className="px-2 font-normal">{b.replace(" (демо)", "")}</th>)}</tr></thead>
+                <thead><tr className="border-b border-ink text-muted"><th className="py-2 text-left font-normal">{t.topics}</th>{a.eff.books.map((b) => <th key={b} className="px-2 font-normal">{nm(b).replace(" (демо)", "").replace(" (demo)", "")}</th>)}</tr></thead>
                 <tbody>
                   {a.topics.map((tp) => (
                     <tr key={tp} className="border-b border-line">
@@ -576,7 +578,7 @@ export default function Home() {
               <p className="mt-2 text-sm text-muted">{t.coverNote}</p>
               <div className="mt-4 overflow-x-auto">
                 <table className="w-full min-w-[560px] text-sm">
-                  <thead><tr className="border-b border-ink text-muted"><th className="py-2 text-left font-normal">{t.topics}</th>{BOOKS.map((b) => <th key={b} className="px-2 font-normal">{b.replace(" (демо)", "")}</th>)}</tr></thead>
+                  <thead><tr className="border-b border-ink text-muted"><th className="py-2 text-left font-normal">{t.topics}</th>{BOOKS.map((b) => <th key={b} className="px-2 font-normal">{nm(b).replace(" (демо)", "").replace(" (demo)", "")}</th>)}</tr></thead>
                   <tbody>
                     {TOPICS.map((tp, i) => (
                       <tr key={tp.name} className="border-b border-line">
@@ -602,7 +604,7 @@ export default function Home() {
               <ul className="mt-3 grid gap-2">
                 {w.issues.map((i) => (
                   <li key={i.textbook + i.topic} className="rounded-md border border-line bg-card p-3 text-[15px]">
-                    <b>{i.textbook}</b> · {label(i.topic)} — <span className="font-mono">{i.pages} {t.pages}</span> <span className="text-muted">({t.median}: {i.medianPages})</span>, <span className="font-mono text-bad">{fmt(i.effect)} [{fmt(i.lo)}; {fmt(i.hi)}]</span>
+                    <b>{nm(i.textbook)}</b> · {label(i.topic)} — <span className="font-mono">{i.pages} {t.pages}</span> <span className="text-muted">({t.median}: {i.medianPages})</span>, <span className="font-mono text-bad">{fmt(i.effect)} [{fmt(i.lo)}; {fmt(i.hi)}]</span>
                   </li>
                 ))}
               </ul>
@@ -645,7 +647,7 @@ export default function Home() {
                   <span className="text-muted">{r.plan}</span> → <span className="text-xl">{r.rec}</span>{" "}
                   <span className={r.delta > 0 ? "text-good" : r.delta < 0 ? "text-bad" : "text-muted"}>{r.delta > 0 ? `+${r.delta}` : r.delta < 0 ? r.delta : "±0"}</span>
                 </div>
-                <p className="text-[15px] leading-snug">{r.why}</p>
+                <p className="text-[15px] leading-snug">{nm(r.why)}</p>
               </article>
             ))}
             <div className="print:hidden rounded-md border border-ink p-4">
@@ -781,7 +783,7 @@ export default function Home() {
                     <tbody>
                       {a.dev.map((r) => (
                         <tr key={r.unit} className="border-b border-line">
-                          <td className="py-1 pr-2 text-[13px] whitespace-nowrap">{scope === "all" ? distLabel(r.unit) : r.unit}</td>
+                          <td className="py-1 pr-2 text-[13px] whitespace-nowrap">{scope === "all" ? distLabel(r.unit) : nm(r.unit)}</td>
                           {r.q.map((v, i) => (
                             <td key={i} className={`text-center font-mono text-xs tabular-nums ${v == null ? "text-muted" : v <= -3 ? "bg-bad/20 text-bad" : v >= 3 ? "bg-good/15 text-good" : ""}`}>{v == null ? "—" : fmt(v)}</td>
                           ))}
@@ -801,8 +803,8 @@ export default function Home() {
                 {a.warns.map((w) => (
                   <article key={w.key} className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-md border border-line bg-card p-4">
                     <div className="min-w-[220px] flex-1">
-                      <div className="font-medium">{w.school}, {w.cls}</div>
-                      <div className="text-sm text-muted">{distLabel(w.district)} · {w.textbook}</div>
+                      <div className="font-medium">{nm(w.school)}, {w.cls}</div>
+                      <div className="text-sm text-muted">{distLabel(w.district)} · {nm(w.textbook)}</div>
                     </div>
                     <div className="font-mono text-sm tabular-nums">{t.first}: {fmt(w.first)} → {t.second}: {fmt(w.second)}</div>
                     <div className="font-mono text-sm tabular-nums text-bad">{t.drop}: {fmt(w.drop)} <span className="text-muted">[{fmt(w.lo)}; {fmt(w.hi)}]</span></div>
@@ -913,7 +915,7 @@ export default function Home() {
                         <tbody>
                           {truth.rows.filter((r) => Math.abs(r.truth) >= 2 || Math.abs(r.estimate) >= 3).map((r) => (
                             <tr key={r.textbook + r.topic} className="border-b border-line">
-                              <td className="py-1 pr-2">{r.textbook.replace(" (демо)", "")}</td>
+                              <td className="py-1 pr-2">{nm(r.textbook).replace(" (демо)", "").replace(" (demo)", "")}</td>
                               <td className="pr-2">{label(r.topic)}</td>
                               <td className="pr-2 font-mono">{fmt(r.truth)}</td>
                               <td className="pr-2 font-mono">{fmt(r.estimate)} <span className="text-muted">[{fmt(r.lo)}; {fmt(r.hi)}]</span></td>

@@ -51,10 +51,10 @@ export const BOOK_EFFECT: Record<string, number[]> = {
 };
 
 export const DISTRICTS = [
-  { name: "г. Тараз", kk: "Тараз қ.", level: 72, urban: true, schools: 18, books: [0.12, 0.08, 0.8] },
-  { name: "Шуский район", kk: "Шу ауданы", level: 58, urban: false, schools: 12, books: [0.55, 0.35, 0.1] },
-  { name: "Кордайский район", kk: "Қордай ауданы", level: 56, urban: false, schools: 12, books: [0.45, 0.45, 0.1] },
-  { name: "Байзакский район", kk: "Бәйзақ ауданы", level: 50, urban: false, schools: 12, books: [0.25, 0.7, 0.05] },
+  { name: "г. Тараз", kk: "Тараз қ.", en: "Taraz city", level: 72, urban: true, schools: 18, books: [0.12, 0.08, 0.8] },
+  { name: "Шуский район", kk: "Шу ауданы", en: "Shu district", level: 58, urban: false, schools: 12, books: [0.55, 0.35, 0.1] },
+  { name: "Кордайский район", kk: "Қордай ауданы", en: "Korday district", level: 56, urban: false, schools: 12, books: [0.45, 0.45, 0.1] },
+  { name: "Байзакский район", kk: "Бәйзақ ауданы", en: "Baizak district", level: 50, urban: false, schools: 12, books: [0.25, 0.7, 0.05] },
 ];
 
 // Item-level test for one topic (the Q3 "Алгебраические дроби" СОР): a = discrimination, b = difficulty.
