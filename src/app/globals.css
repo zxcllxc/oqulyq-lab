@@ -1,7 +1,10 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-paper: #f5f2ea;
+  --color-card: #fbfaf6;
   --color-ink: #1c1b17;
   --color-muted: #6b675c;
   --color-line: #e2ddd0;
@@ -14,6 +17,20 @@
   --font-display: var(--font-serif), Georgia, serif;
 }
 
+/* dark: same tokens, inverted paper/ink; accents lifted for contrast */
+.dark {
+  --color-paper: #161512;
+  --color-card: #1f1e1a;
+  --color-ink: #ece7da;
+  --color-muted: #a39e90;
+  --color-line: #34322c;
+  --color-accent: #7fb0dd;
+  --color-good: #6fbf95;
+  --color-bad: #e07a5f;
+  --color-amber: #e9c46a;
+  color-scheme: dark;
+}
+
 body {
   background: var(--color-paper);
   color: var(--color-ink);
@@ -23,4 +40,9 @@ body {
   font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+@media print {
+  body { background: #fff; }
+  section { break-inside: avoid-page; }
 }

@@ -7,7 +7,7 @@ const topics = TOPICS.map((t) => t.name);
 const hours = Object.fromEntries(TOPICS.map((t) => [t.name, t.hours]));
 
 test("hours: total stays the same and no topic below 75% of plan", () => {
-  const rows = generateDemo();
+  const rows = generateDemo().rows;
   const stats = topicStats(rows, topics);
   const eff = textbookEffects(classTopics(rows), topics);
   const recs = hourRecs(stats, hours, eff.cells, "ru", (x) => x);
@@ -22,11 +22,11 @@ test("fair comparison removes entry-level bias: equal books in schools of differ
   for (let c = 0; c < 6; c++) {
     const strong = c < 3, baseline = strong ? 80 : 50;
     for (let s = 0; s < 20; s++)
-      rows.push({ school: `S${c}`, cls: "7A", textbook: strong ? "X" : "Y", topic: "T", score: baseline + ((s % 5) - 2), baseline });
+      rows.push({ district: "D", quarter: 1, school: `S${c}`, cls: "7A", textbook: strong ? "X" : "Y", topic: "T", score: baseline + ((s % 5) - 2), baseline });
   }
   // add same-level classes for both books so the slope is identifiable
   for (let c = 6; c < 10; c++) for (let s = 0; s < 20; s++)
-    rows.push({ school: `S${c}`, cls: "7A", textbook: c % 2 ? "X" : "Y", topic: "T", score: 65 + ((s % 5) - 2) + (c % 2 ? 0 : 0), baseline: 65 });
+    rows.push({ district: "D", quarter: 1, school: `S${c}`, cls: "7A", textbook: c % 2 ? "X" : "Y", topic: "T", score: 65 + ((s % 5) - 2) + (c % 2 ? 0 : 0), baseline: 65 });
   const eff = textbookEffects(classTopics(rows), ["T"]);
   const x = eff.overall.find((e) => e.textbook === "X")!, y = eff.overall.find((e) => e.textbook === "Y")!;
   assert.ok(x.naive - y.naive > 15, "naive gap is big");
@@ -34,13 +34,13 @@ test("fair comparison removes entry-level bias: equal books in schools of differ
 });
 
 test("few classes -> verdict 'few'", () => {
-  const rows: Row[] = [0, 1].flatMap((c) => Array.from({ length: 10 }, (_, s) => ({ school: `S${c}`, cls: "7A", textbook: "Z", topic: "T", score: 60 + s, baseline: 60 })));
+  const rows: Row[] = [0, 1].flatMap((c) => Array.from({ length: 10 }, (_, s) => ({ district: "D", quarter: 1, school: `S${c}`, cls: "7A", textbook: "Z", topic: "T", score: 60 + s, baseline: 60 })));
   const eff = textbookEffects(classTopics(rows), ["T"]);
   assert.equal(eff.overall[0].verdict, "few");
 });
 
 test("demo: book B is significantly weak on 'Формулы сокращённого умножения'", () => {
-  const rows = generateDemo();
+  const rows = generateDemo().rows;
   const eff = textbookEffects(classTopics(rows), topics);
   const c = eff.cells.find((c) => c.textbook === "Учебник Б (демо)" && c.topic === "Формулы сокращённого умножения")!;
   assert.equal(c.verdict, "worse");

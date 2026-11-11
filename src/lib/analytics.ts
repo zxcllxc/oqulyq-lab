@@ -3,6 +3,7 @@ import type { Row } from "./data";
 export const TARGET = 70; // target mean score for a topic, %
 export const PASS = 60; // student "mastered" the topic if score >= PASS
 const Z = 1.96;
+export const MIN_EFFECT = 3; // p.p.: smaller differences are not worth a textbook decision even if statistically significant
 
 const mean = (a: number[]) => a.reduce((s, x) => s + x, 0) / (a.length || 1);
 const sd = (a: number[]) => {
@@ -12,14 +13,14 @@ const sd = (a: number[]) => {
 };
 const r1 = (x: number) => Math.round(x * 10) / 10;
 
-export type ClassTopic = { key: string; school: string; cls: string; textbook: string; topic: string; baseline: number; mean: number; n: number };
+export type ClassTopic = { key: string; district: string; quarter: number; school: string; cls: string; textbook: string; topic: string; baseline: number; mean: number; n: number };
 
 export function classTopics(rows: Row[]): ClassTopic[] {
   const m = new Map<string, ClassTopic & { sum: number }>();
   for (const r of rows) {
     const key = `${r.school}|${r.cls}`;
     const k = `${key}|${r.topic}`;
-    const e = m.get(k) ?? { key, school: r.school, cls: r.cls, textbook: r.textbook, topic: r.topic, baseline: r.baseline, mean: 0, n: 0, sum: 0 };
+    const e = m.get(k) ?? { key, district: r.district, quarter: r.quarter, school: r.school, cls: r.cls, textbook: r.textbook, topic: r.topic, baseline: r.baseline, mean: 0, n: 0, sum: 0 };
     e.sum += r.score;
     e.n++;
     m.set(k, e);
@@ -65,7 +66,7 @@ export function fairModel(cts: ClassTopic[]) {
 function effectOf(textbook: string, topic: string | null, vals: number[]): Effect {
   const k = vals.length, m = mean(vals), half = k > 1 ? (Z * sd(vals)) / Math.sqrt(k) : Infinity;
   const lo = m - half, hi = m + half;
-  const verdict = k < 3 ? "few" : lo > 0 ? "better" : hi < 0 ? "worse" : "same";
+  const verdict = k < 3 ? "few" : lo > 0 && m >= MIN_EFFECT ? "better" : hi < 0 && m <= -MIN_EFFECT ? "worse" : "same";
   return { textbook, topic, effect: r1(m), lo: r1(lo), hi: r1(hi), k, verdict };
 }
 
@@ -91,7 +92,7 @@ export type HourRec = { topic: string; plan: number; rec: number; delta: number;
  * unless the gap is explained by one textbook (then fix the textbook chapter, not the hours).
  * Hours are taken from topics at or above TARGET, never below 75% of plan.
  */
-export function hourRecs(stats: TopicStat[], hours: Record<string, number>, cells: Effect[], lang: "ru" | "kk", label: (t: string) => string): HourRec[] {
+export function hourRecs(stats: TopicStat[], hours: Record<string, number>, cells: Effect[], lang: "ru" | "kk" | "en", label: (t: string) => string): HourRec[] {
   const recs: HourRec[] = stats.map((s) => {
     const plan = hours[s.topic] ?? 6;
     const worst = cells.filter((c) => c.topic === s.topic && c.verdict === "worse").sort((x, y) => x.effect - y.effect)[0];
@@ -122,6 +123,13 @@ export function hourRecs(stats: TopicStat[], hours: Record<string, number>, cell
         r.cause === "textbook" ? `Отставание ${gap} п.п. объясняется главой «${r.weakBook}»: её классы ниже ожидаемого. Часы не добавляем — заменить/дополнить главу.` :
         r.cause === "surplus" ? (r.delta < 0 ? `Балл ${r.mean}% выше цели на ${r1(-gap)} п.п. Можно отдать ${-r.delta} ч, не опускаясь ниже 75% плана.` : `Балл ${r.mean}% выше цели, запас есть, но часы не потребовались.`) :
         `Балл ${r.mean}% около цели — оставить как есть.`;
+    } else if (lang === "en") {
+      r.why =
+        r.cause === "hours" && r.delta === 0 ? `Mean ${r.mean}% is ${gap} p.p. below target, but the free hours went to topics with bigger gaps. Next in line for hours.` :
+        r.cause === "hours" ? `Mean ${r.mean}% is ${gap} p.p. below the ${TARGET}% target with every textbook: a time deficit, not a textbook problem. +${r.delta} h taken from: ${donorNames || "reserve"}.` :
+        r.cause === "textbook" ? `The ${gap} p.p. gap comes from the “${r.weakBook}” chapter: its classes are below expected. No extra hours: replace or supplement the chapter.` :
+        r.cause === "surplus" ? (r.delta < 0 ? `Mean ${r.mean}% is ${r1(-gap)} p.p. above target. Can give ${-r.delta} h, staying at ≥ 75% of plan.` : `Mean ${r.mean}% is above target; hours were not needed.`) :
+        `Mean ${r.mean}% is near target — keep as is.`;
     } else {
       r.why =
         r.cause === "hours" && r.delta === 0 ? `Орташа балл ${r.mean}%, мақсаттан ${gap} п.п. төмен, бірақ бос сағаттар артта қалуы көбірек тақырыптарға берілді. Келесі кандидат.` :
