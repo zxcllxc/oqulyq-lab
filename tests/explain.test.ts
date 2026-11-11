@@ -47,3 +47,13 @@ test("explain does not claim 'similar textbooks' when there is too little data",
   assert.ok(ex.summary.some((x) => /данных пока мало/.test(x.text)));
   assert.ok(!ex.summary.some((x) => /похожий результат/.test(x.text)));
 });
+
+test("ask: price → honest no data; topic question → that topic's facts; weakest textbook leads with chapters", () => {
+  const names = TOPICS.map((t) => t.name);
+  assert.match(askTemplate("Сколько стоит учебник?", facts, "ru", names).answer, /цен учебников в данных нет/);
+  const fr = askTemplate("Почему дроби не усваиваются?", facts, "ru", names);
+  assert.match(fr.answer, /Алгебраические дроби/);
+  assert.ok(fr.refs.includes("T1"));
+  const b = askTemplate("Какой учебник слабее?", facts, "ru", names);
+  assert.ok(b.refs[0].startsWith("C"), b.refs.join(","));
+});

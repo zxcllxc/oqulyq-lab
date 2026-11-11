@@ -153,7 +153,7 @@ export default function Home() {
   }, [rows, allCts, isDemo, mapTopic]);
   const hoursModel = useMemo(() => estimateHoursEffect(rows, allCts, hours), [rows, allCts, hours]);
   const causes = a.stats.map((st) => whereIsCause(view.cts, a.eff.cells, st.topic, st.mean));
-  const factInput = { stats: a.stats, overall: a.eff.overall, cells: a.eff.cells, recs: a.recs, items: a.items, warns: a.warns, did: w.did, label, fmt, lang, name: nm };
+  const factInput = { stats: a.stats, overall: a.eff.overall, cells: a.eff.cells, recs: a.recs, items: a.items, warns: a.warns, did: w.did, label, fmt, lang, name: nm, causes };
   const facts = buildFacts(factInput);
   const ownFacts = facts.filter((f) => f.tab === tab);
   const tabFacts = tab === 0 || ownFacts.length === 0 ? facts : ownFacts; // a tab without its own facts gets the overall picture
@@ -383,7 +383,7 @@ export default function Home() {
 
           <div className="rounded-md border border-ink p-4">
             <h2 className="font-display text-2xl">{t.askTitle}</h2>
-            <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setAskA(askTemplate(askQ, facts, lang)); setAiAsk({ status: "loading" }); callAi("ask", facts, askQ).then(setAiAsk); }}>
+            <form className="mt-2 flex flex-wrap gap-2" onSubmit={(e) => { e.preventDefault(); setAskA(askTemplate(askQ, facts, lang, TOPICS.map((x) => label(x.name)))); setAiAsk({ status: "loading" }); callAi("ask", facts, askQ).then(setAiAsk); }}>
               <input name="ask" value={askQ} onChange={(e) => setAskQ(e.target.value)} placeholder={t.askPh} className="min-w-0 flex-1 rounded-md border border-line bg-paper px-3 py-2 text-[15px]" />
               <button type="submit" className="rounded-full bg-ink px-4 py-1.5 text-sm text-paper">{t.askBtn}</button>
             </form>

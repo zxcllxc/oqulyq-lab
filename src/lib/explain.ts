@@ -19,7 +19,11 @@ export type FactInput = {
   fmt: (x: number) => string;
   lang?: Lang;
   name?: (s: string) => string; // display name for demo textbooks/schools in the chosen language
+  causes?: { topic: string; level: string; textbook?: string; worst?: { school: string; cls: string; textbook: string; resid: number }; others?: { n: number; mean: number } }[];
 };
+
+// topic stems for "ask about a specific topic" (RU/KK/EN), mapped to the program topic order
+const TOPIC_STEMS = [/(степен|дәреже|power)/, /(одночлен|бірмүше|monomial)/, /(многочлен|көпмүше|polynomial)/, /(формул|сокращ|көбейту формул|special product)/, /(разлож|множител|жіктеу|factor)/, /(дроб|бөлшек|fraction)/, /(функц|function)/, /(линейн.*уравн(?!.*систем)|^(?!.*систем).*уравнен|сызықтық теңдеу(?!лер жүйе)|linear equation)/, /(систем|жүйе|system)/, /(статист|statistic)/];
 
 const L = {
   ru: {
@@ -41,7 +45,13 @@ const L = {
     stC: "Для слабых глав подобрать дополнительные задания и разбор типичных ошибок.",
     stQ: "Проверить ключ и формулировку плохих вопросов СОР до выставления оценок.",
     stW: "Связаться со школами, где классы просели: выяснить причину (учитель, больничный).",
-    heads: ["Самые трудные темы:", "По учебникам:", "По часам:", "По заданиям:", "Классы, которые просели:", "Естественный эксперимент:"],
+    heads: ["Самые трудные темы:", "По учебникам:", "По часам:", "По заданиям:", "Классы, которые просели:", "Естественный эксперимент:", "Где причина:"],
+    cause: (t: string, lvl: string, extra: string) => `Где причина по теме «${t}»: ${lvl}${extra}.`,
+    lvl: { program: "программа и часы — тема проседает у всех учебников", textbook: "учебник", school: "школа", class: "один класс", none: "в норме" } as Record<string, string>,
+    causeBook: (b: string) => ` «${b}» — его классы ниже ожидаемого`,
+    causeClass: (c: string, s: string, n: number, m: string) => ` ${c}, ${s}; остальные ${n} классов с этим учебником в норме (${m} п.п.)`,
+    noPrice: "Не знаю: цен учебников в данных нет. Платформа сравнивает результаты, а не стоимость.",
+    topicHead: (t: string) => `По теме «${t}»:`,
     dontKnow: "Не знаю: в загруженных данных нет ответа на этот вопрос. Спросите о трудных темах, учебниках, часах, заданиях СОР или классах, которые просели.",
     plan: ["ПЛАН МЕТОДИСТА (черновик — отредактируйте перед выгрузкой)", "1. Изменения в КТП (общий объём не меняется)", "2. План коррекции по трудным темам", "3. Повестка методобъединения"],
     planTopic: (t: string, m: number, p: number) => `${t} (средний ${m}%, усвоили ${p}%):`,
@@ -67,7 +77,13 @@ const L = {
     stC: "Әлсіз тарауларға қосымша тапсырмалар мен типтік қателерді талдау дайындау.",
     stQ: "Бағалау алдында БЖБ-ның нашар сұрақтарының кілті мен тұжырымын тексеру.",
     stW: "Сыныптары төмендеген мектептермен байланысып, себебін анықтау (мұғалім, ауру).",
-    heads: ["Ең қиын тақырыптар:", "Оқулықтар бойынша:", "Сағаттар бойынша:", "Тапсырмалар бойынша:", "Төмендеген сыныптар:", "Табиғи эксперимент:"],
+    heads: ["Ең қиын тақырыптар:", "Оқулықтар бойынша:", "Сағаттар бойынша:", "Тапсырмалар бойынша:", "Төмендеген сыныптар:", "Табиғи эксперимент:", "Себеп қайда:"],
+    cause: (t: string, lvl: string, extra: string) => `«${t}» бойынша себеп: ${lvl}${extra}.`,
+    lvl: { program: "бағдарлама мен сағат — тақырып барлық оқулықта төмен", textbook: "оқулық", school: "мектеп", class: "бір сынып", none: "қалыпты" } as Record<string, string>,
+    causeBook: (b: string) => ` «${b}» — оның сыныптары күтілгеннен төмен`,
+    causeClass: (c: string, s: string, n: number, m: string) => ` ${c}, ${s}; осы оқулықпен оқитын қалған ${n} сынып қалыпты (${m} п.п.)`,
+    noPrice: "Білмеймін: деректерде оқулық бағасы жоқ. Платформа құнды емес, нәтижені салыстырады.",
+    topicHead: (t: string) => `«${t}» тақырыбы бойынша:`,
     dontKnow: "Білмеймін: жүктелген деректерде бұл сұраққа жауап жоқ. Қиын тақырыптар, оқулықтар, сағаттар, БЖБ тапсырмалары немесе төмендеген сыныптар туралы сұраңыз.",
     plan: ["ӘДІСКЕР ЖОСПАРЫ (жоба — жүктер алдында түзетіңіз)", "1. КТЖ өзгерістері (жалпы көлем өзгермейді)", "2. Қиын тақырыптар бойынша түзету жоспары", "3. Әдістемелік бірлестік күн тәртібі"],
     planTopic: (t: string, m: number, p: number) => `${t} (орташа ${m}%, меңгерді ${p}%):`,
@@ -93,7 +109,13 @@ const L = {
     stC: "Pick extra exercises and a walkthrough of typical mistakes for the weak chapters.",
     stQ: "Check the key and wording of broken test questions before grading.",
     stW: "Contact schools whose classes slid and find out why (teacher change, sick leave).",
-    heads: ["Hardest topics:", "Textbooks:", "Hours:", "Test items:", "Classes that slid:", "Natural experiment:"],
+    heads: ["Hardest topics:", "Textbooks:", "Hours:", "Test items:", "Classes that slid:", "Natural experiment:", "Where the cause is:"],
+    cause: (t: string, lvl: string, extra: string) => `Cause for “${t}”: ${lvl}${extra}.`,
+    lvl: { program: "programme and hours — the topic is low with every textbook", textbook: "textbook", school: "school", class: "one class", none: "on track" } as Record<string, string>,
+    causeBook: (b: string) => ` “${b}” — its classes are below expected`,
+    causeClass: (c: string, s: string, n: number, m: string) => ` ${c}, ${s}; the other ${n} classes with this textbook are fine (${m} p.p.)`,
+    noPrice: "I don't know: the data has no textbook prices. The platform compares results, not cost.",
+    topicHead: (t: string) => `On “${t}”:`,
     dontKnow: "I don't know: the loaded data has no answer to this. Ask about hard topics, textbooks, hours, test items or classes that slid.",
     plan: ["METHODOLOGIST PLAN (draft — edit before export)", "1. Term plan changes (total unchanged)", "2. Correction plan for hard topics", "3. Methodical meeting agenda"],
     planTopic: (t: string, m: number, p: number) => `${t} (mean ${m}%, mastered ${p}%):`,
@@ -114,6 +136,10 @@ export function buildFacts(x: FactInput): Fact[] {
   if (moved.length) f.push({ id: "H1", tab: 2, text: T.hours(moved.map((r) => `«${x.label(r.topic)}» ${r.plan}→${r.rec} ${T.h}`).join(", "), x.recs.reduce((s, r) => s + r.plan, 0)) });
   x.items.filter((i) => i.flags.length).forEach((i) => f.push({ id: `Q${i.item + 1}`, tab: 3, text: T.item(i.item + 1, Math.round(i.p * 100), i.rpb, i.trap) }));
   x.warns.forEach((w, i) => f.push({ id: `W${i + 1}`, tab: 4, text: T.warn(nm(w.school), w.cls, x.fmt(w.drop), x.fmt(w.lo), x.fmt(w.hi)) }));
+  (x.causes ?? []).filter((c) => c.level !== "none").forEach((c, i) => {
+    const extra = c.level === "textbook" && c.textbook ? T.causeBook(nm(c.textbook)) : (c.level === "class" || c.level === "school") && c.worst && c.others ? T.causeClass(c.worst.cls, nm(c.worst.school), c.others.n, x.fmt(c.others.mean)) : "";
+    f.push({ id: `R${i + 1}`, tab: 1, text: T.cause(x.label(c.topic), T.lvl[c.level] ?? c.level, extra) });
+  });
   x.did.filter((d) => d.significant).slice(0, 3).forEach((d, i) => f.push({ id: `E${i + 1}`, tab: 6, text: T.did(nm(d.from), nm(d.to), x.label(d.topic), x.fmt(d.did), x.fmt(d.lo), x.fmt(d.hi)) }));
   return f;
 }
@@ -140,17 +166,26 @@ export function explainTemplate(facts: Fact[], lang: Lang = "ru"): { summary: { 
 }
 
 /** "Ask the data" without AI: keyword intents (RU/KK/EN) over the facts; honest "don't know" otherwise. */
-export function askTemplate(q: string, facts: Fact[], lang: Lang = "ru"): { answer: string; refs: string[] } {
+export function askTemplate(q: string, facts: Fact[], lang: Lang = "ru", topicNames: string[] = []): { answer: string; refs: string[] } {
   const T = L[lang];
   const s = q.toLowerCase();
-  const pick = (p: string[]) => facts.filter((f) => p.some((x) => f.id.startsWith(x)));
+  if (/(цен|стоит|стоимост|бағас|құны|price|cost)/.test(s)) return { answer: T.noPrice, refs: [] };
+  // a question about one topic: everything we know about it (score, cause, chapters, hours, experiment)
+  const ti = TOPIC_STEMS.findIndex((re) => re.test(s));
+  if (ti >= 0 && topicNames[ti]) {
+    const name = topicNames[ti];
+    const fs = facts.filter((f) => f.text.includes(`«${name}»`) || f.text.includes(`“${name}”`) || f.text.includes(name));
+    if (fs.length) return { answer: `${T.topicHead(name)}\n${fs.map((f) => `• ${f.text} [${f.id}]`).join("\n")}`, refs: fs.map((f) => f.id) };
+  }
+  const pick = (p: string[]) => p.flatMap((x) => facts.filter((f) => f.id.startsWith(x))); // in priority order
   // order matters: specific intents (switch, items, hours, classes) before the broad "topic" one
   const intents: [RegExp, string[], number][] = [
     [/(смен|эксперимент|перешл|перешед|ауыс|switch|experiment)/, ["E"], 5],
     [/(вопрос|задани|сор|соч|ключ|сұрақ|тапсырма|бжб|item|question)/, ["Q"], 3],
     [/(час|сағат|hour|ктп|ктж|time)/, ["H"], 2],
     [/(просел|упал|снизил|предупрежд|төмендеген|төмендеді|ескерту|slid|warning|drop)/, ["W"], 4],
-    [/(учебник|оқулық|textbook|книг|издател|баспа)/, ["B", "C", "E"], 1],
+    [/(учебник|оқулық|textbook|книг|издател|баспа)/, ["C", "B", "E"], 1],
+    [/(почему|причин|неге|себеп|why|cause)/, ["R"], 6],
     [/(трудн|сложн|слаб|не усвоил|қиын|әлсіз|hard|difficult|weak|тема|тақырып|topic)/, ["T"], 0],
   ];
   for (const [re, prefixes, head] of intents) {
