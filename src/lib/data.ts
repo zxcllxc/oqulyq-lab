@@ -122,3 +122,29 @@ export function generateDemo(): { rows: Row[]; responses: Response[] } {
   }
   return { rows, responses };
 }
+
+/**
+ * DEMO: last year's school × topic means (separate seed, so this year's numbers do not move).
+ * About a third of schools now on textbook В used Б last year — the "natural experiment" for difference-in-differences.
+ */
+export function generatePrevYear(rows: Row[]): { school: string; textbook: string; topic: string; mean: number }[] {
+  const rnd = mulberry32(777);
+  const gauss = () => Math.sqrt(-2 * Math.log(rnd() + 1e-9)) * Math.cos(2 * Math.PI * rnd());
+  const schools = new Map<string, { book: string; base: number[] }>();
+  for (const r of rows) {
+    const s = schools.get(r.school) ?? { book: r.textbook, base: [] };
+    s.base.push(r.baseline);
+    schools.set(r.school, s);
+  }
+  const out: { school: string; textbook: string; topic: string; mean: number }[] = [];
+  for (const [school, s] of schools) {
+    const level = s.base.reduce((a, b) => a + b, 0) / s.base.length;
+    const prevBook = s.book === "Учебник В (демо)" && rnd() < 0.4 ? "Учебник Б (демо)" : s.book;
+    TOPICS.forEach((t, i) => {
+      // same model as this year: base + level + chapter effect; −1 p.p. year shift, school noise
+      const mean = BASE[i] + 0.7 * (level - 62) + BOOK_EFFECT[prevBook][i] - 1 + gauss() * 2.5;
+      out.push({ school, textbook: prevBook, topic: t.name, mean: Math.round(mean * 10) / 10 });
+    });
+  }
+  return out;
+}

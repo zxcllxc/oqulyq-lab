@@ -1,13 +1,15 @@
 "use client";
 import { useEffect, useMemo, useState } from "react";
 import * as XLSX from "xlsx";
-import { BOOKS, COVERAGE, DISTRICTS, generateDemo, ITEMS, ITEM_TOPIC, TOPICS, type Response, type Row } from "@/lib/data";
+import { BOOKS, COVERAGE, DISTRICTS, generateDemo, generatePrevYear, ITEMS, ITEM_TOPIC, TOPICS, type Response, type Row } from "@/lib/data";
 import { classTopics, hourRecs, PASS, TARGET, textbookEffects, topicStats } from "@/lib/analytics";
 import { deviationByUnit, earlyWarnings, itemAnalysis, quarterDynamics } from "@/lib/diagnostics";
+import { differenceInDifferences, procurement, publisherIssues, remedialWeek, schoolTopicMeans } from "@/lib/wow";
 import { T, type Lang } from "@/lib/i18n";
 import { parseImport, type Quality } from "@/lib/importer";
 
 const DEMO = generateDemo();
+const PREV = generatePrevYear(DEMO.rows);
 // shortcut: assumed +2.5 p.p. per extra hour (demo assumption), estimate from real hour variation between schools when data has it
 const ELASTICITY = 2.5;
 const DEMO_HOURS = Object.fromEntries(TOPICS.map((t) => [t.name, t.hours]));
@@ -31,6 +33,9 @@ export default function Home() {
   const [wiDelta, setWiDelta] = useState(2);
   const [all, setAll] = useState(false);
   const [notified, setNotified] = useState<string[]>([]);
+  const [mapTopic, setMapTopic] = useState("");
+  const [openAction, setOpenAction] = useState("");
+  const [simDistrict, setSimDistrict] = useState("");
   const t = T[lang];
   const show = (i: number) => tab === i || all;
   const label = (topic: string) => (lang === "kk" ? TOPIC_BY_NAME[topic]?.kk : lang === "en" ? TOPIC_BY_NAME[topic]?.en : undefined) || topic;
@@ -96,6 +101,22 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, allCts, hours, lang, role, scope]);
 
+  const w = useMemo(() => {
+    const topicsAll = [...new Set(rows.map((r) => r.topic))];
+    const eff = textbookEffects(allCts, topicsAll);
+    const did = isDemo ? differenceInDifferences(PREV, schoolTopicMeans(rows), "Учебник Б (демо)", "Учебник В (демо)") : [];
+    const distMean = (d: string) => {
+      const rs = rows.filter((r) => r.district === d && (!mapTopic || r.topic === mapTopic));
+      return rs.length ? Math.round((rs.reduce((x, r) => x + r.score, 0) / rs.length) * 10) / 10 : null;
+    };
+    const issues = publisherIssues(eff.cells);
+    return { eff, did, distMean, issues };
+  }, [rows, allCts, isDemo, mapTopic]);
+  const simD = simDistrict || districts[0] || "";
+  const simStudents = Math.round(rows.filter((r) => r.district === simD).length / Math.max(1, new Set(rows.map((r) => r.topic)).size));
+  const money = procurement(w.eff.overall, simStudents);
+  const fmtT = (n: number) => n.toLocaleString("ru-RU");
+
   const sorted = [...a.stats].sort((x, y) => x.mean - y.mean);
   const naiveBest = [...a.eff.overall].sort((x, y) => y.naive - x.naive)[0];
   const worstCell = [...a.eff.cells].filter((c) => c.verdict === "worse").sort((x, y) => x.effect - y.effect)[0];
@@ -140,6 +161,31 @@ export default function Home() {
   }
   const downloadTemplate = () => download("oqulyq-demo.xlsx", DEMO.rows.slice(0, 3000).map((r) => ({ district: r.district, school: r.school, class: r.cls, textbook: r.textbook, topic: r.topic, quarter: r.quarter, score: r.score, baseline: r.baseline, hours: DEMO_HOURS[r.topic] })));
   const downloadKtp = () => download("oqulyq-ktp.xlsx", a.recs.map((r, i) => ({ "№": i + 1, [t.topics]: label(r.topic), [t.quarter]: TOPIC_BY_NAME[r.topic]?.quarter ?? "", [t.plan]: r.plan, [t.rec]: r.rec, "Δ": r.delta, [t.why]: r.why })));
+  function saveDoc(name: string, title: string, body: string) {
+    const html = `<html><head><meta charset="utf-8"><title>${title}</title></head><body style="font-family:'Times New Roman',serif;font-size:14pt;line-height:1.4">${body}</body></html>`;
+    const url = URL.createObjectURL(new Blob(["\ufeff" + html], { type: "application/msword" }));
+    const el = document.createElement("a");
+    el.href = url; el.download = name; el.click();
+    URL.revokeObjectURL(url);
+  }
+  const esc = (x: string) => x.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]!);
+  function downloadMemo() {
+    const today = new Date().toLocaleDateString(lang === "en" ? "en-GB" : "ru-RU");
+    const books = w.eff.overall.map((e) => `<tr><td>${esc(e.textbook)}</td><td>${e.naive}%</td><td>${fmt(e.effect)} [${fmt(e.lo)}; ${fmt(e.hi)}]</td><td>${esc(t.v[e.verdict])}</td></tr>`).join("");
+    const did = w.did.filter((d) => d.significant).slice(0, 3).map((d) => `<li>${esc(label(d.topic))}: ${fmt(d.did)} п.п. [${fmt(d.lo)}; ${fmt(d.hi)}]</li>`).join("");
+    const hrs = a.recs.filter((r) => r.delta !== 0).map((r) => `<li>${esc(label(r.topic))}: ${r.plan} → ${r.rec} ч</li>`).join("");
+    const v = money.find((m) => m.textbook === "Учебник В (демо)");
+    const body = lang === "kk"
+      ? `<p style="text-align:right">Білім басқармасының басшысына (демо)</p><h2 style="text-align:center">${t.memoTitle}</h2><p>Тақырып: 7-сыныптың алгебра оқулықтарын таңдау және сағаттарды бөлу. Күні: ${today}.</p><p>Тестілеу деректері (${rows.length} нәтиже) Oqulyq Lab-та талданды. Оқулықтарды әділ салыстыру (сыныптың бастапқы деңгейін ескере отырып):</p><table border="1" cellpadding="4" style="border-collapse:collapse"><tr><th>Оқулық</th><th>Орташа</th><th>Әділ әсер, п.п.</th><th>Қорытынды</th></tr>${books}</table>${did ? `<p>Табиғи эксперимент (Б → В ауысқан мектептер):</p><ul>${did}</ul>` : ""}${v ? `<p>${esc(t.moneyVerdict(v.textbook, fmtT(v.extraCost)))} (${esc(simD)}).</p>` : ""}<p><b>Ұсыныс:</b> оқулықты орташа балл бойынша ауыстырмау; әлсіз тарауларды қосымша материалмен толықтыру; сағаттарды қайта бөлу:</p><ul>${hrs}</ul><p>Деректер — демо. Әдістеме: docs/method.md.</p><p>Әдіскер ____________</p>`
+      : lang === "en"
+      ? `<p style="text-align:right">To the head of the education department (demo)</p><h2 style="text-align:center">${t.memoTitle}</h2><p>Subject: choice of grade-7 algebra textbooks and allocation of hours. Date: ${today}.</p><p>Test data (${rows.length} results) were analysed in Oqulyq Lab. Fair textbook comparison (adjusted for class entry level):</p><table border="1" cellpadding="4" style="border-collapse:collapse"><tr><th>Textbook</th><th>Mean</th><th>Fair effect, p.p.</th><th>Verdict</th></tr>${books}</table>${did ? `<p>Natural experiment (schools that switched Б → В):</p><ul>${did}</ul>` : ""}${v ? `<p>${esc(t.moneyVerdict(v.textbook, fmtT(v.extraCost)))} (${esc(simD)}).</p>` : ""}<p><b>Recommendation:</b> do not switch textbooks based on mean scores; supplement weak chapters; reallocate hours:</p><ul>${hrs}</ul><p>Demo data. Method: docs/method.md.</p><p>Methodologist ____________</p>`
+      : `<p style="text-align:right">Руководителю управления образования (демо)</p><h2 style="text-align:center">${t.memoTitle}</h2><p>О выборе учебников алгебры для 7 класса и распределении учебных часов. Дата: ${today}.</p><p>Результаты тестирования (${rows.length} результатов) проанализированы в Oqulyq Lab. Честное сравнение учебников (с учётом уровня класса на входе):</p><table border="1" cellpadding="4" style="border-collapse:collapse"><tr><th>Учебник</th><th>Средний балл</th><th>Честный эффект, п.п. (95% ДИ)</th><th>Вывод</th></tr>${books}</table>${did ? `<p>Естественный эксперимент (школы, сменившие учебник Б на В):</p><ul>${did}</ul>` : ""}${v ? `<p>${esc(t.moneyVerdict(v.textbook, fmtT(v.extraCost)))} (${esc(simD)}).</p>` : ""}<p><b>Рекомендация:</b> не менять учебник по среднему баллу; закупать самый доступный учебник, если доказанной разницы нет; дополнить слабые главы материалами; перераспределить часы в пределах годового объёма:</p><ul>${hrs}</ul><p>Данные демонстрационные. Методика: docs/method.md.</p><p>Методист ____________</p>`;
+    saveDoc("oqulyq-zapiska.doc", t.memoTitle, body);
+  }
+  function downloadPublisher() {
+    const rowsHtml = w.issues.map((i) => `<tr><td>${esc(i.textbook)}</td><td>${esc(label(i.topic))}</td><td>${i.pages}</td><td>${i.medianPages}</td><td>${fmt(i.effect)} [${fmt(i.lo)}; ${fmt(i.hi)}]</td></tr>`).join("");
+    saveDoc("oqulyq-publisher.doc", t.publisherTitle, `<h2>${t.publisherTitle}</h2><p>${esc(t.publisherNote)}</p><table border="1" cellpadding="4" style="border-collapse:collapse"><tr><th>${t.book}</th><th>${t.topics}</th><th>${t.pages}</th><th>${t.median}</th><th>${esc(t.fair)}</th></tr>${rowsHtml}</table><p>Oqulyq Lab · демо</p>`);
+  }
   function printReport() {
     setAll(true);
     setTimeout(() => { window.print(); setAll(false); }, 300);
@@ -147,7 +193,7 @@ export default function Home() {
 
   const scopeOptions = role === "district" ? districts : role === "school" ? schools : [];
   const tabBtn = (i: number) => (
-    <button key={i} onClick={() => setTab(i)} aria-current={tab === i ? "page" : undefined} className={`shrink-0 rounded-full px-4 py-1.5 text-sm transition-colors ${tab === i ? "bg-ink text-paper" : "hover:bg-line"}`}>{t.tabs[i]}</button>
+    <button key={i} onClick={() => setTab(i)} aria-current={tab === i ? "page" : undefined} className={`shrink-0 rounded-full px-4 py-1.5 text-sm transition-colors ${tab === i ? "bg-ink text-paper" : "hover:bg-line"}`}>{i === 6 ? t.tab6 : t.tabs[i]}</button>
   );
 
   return (
@@ -190,7 +236,7 @@ export default function Home() {
 
       <nav className="print:hidden sticky top-0 z-10 -mx-4 flex items-center gap-1 overflow-x-auto bg-paper/95 px-4 py-3 backdrop-blur sm:mx-0 sm:px-0">
         <span className="mr-1 shrink-0 font-mono text-[11px] uppercase tracking-wider text-muted">{t.groups[0]}</span>
-        {[0, 1, 2].map(tabBtn)}
+        {[0, 1, 2, 6].map(tabBtn)}
         <span className="mx-2 h-5 w-px shrink-0 bg-line" />
         <span className="mr-1 shrink-0 font-mono text-[11px] uppercase tracking-wider text-muted">{t.groups[1]}</span>
         {[3, 4, 5].map(tabBtn)}
@@ -222,6 +268,45 @@ export default function Home() {
           </div>
 
           <div>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <h2 className="font-display text-2xl">{t.mapTitle}</h2>
+              <select value={mapTopic} onChange={(e) => setMapTopic(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1 text-sm" aria-label={t.topics}>
+                <option value="">{t.allTopics}</option>
+                {a.topics.map((tp) => <option key={tp} value={tp}>{label(tp)}</option>)}
+              </select>
+            </div>
+            <p className="mt-2 max-w-3xl text-sm text-muted">{t.mapNote}</p>
+            {(() => {
+              const shapes: Record<string, { d?: string; c?: [number, number, number]; lx: number; ly: number }> = {
+                "Байзакский район": { d: "M20,60 L180,30 L210,150 L160,250 L30,220 Z", lx: 85, ly: 225 },
+                "Шуский район": { d: "M180,30 L380,40 L400,150 L210,150 Z", lx: 290, ly: 95 },
+                "Кордайский район": { d: "M210,150 L400,150 L410,260 L160,250 Z", lx: 300, ly: 210 },
+                "г. Тараз": { c: [115, 120, 30], lx: 115, ly: 168 },
+              };
+              const known = districts.filter((d) => shapes[d]);
+              if (!known.length) return null;
+              // relative scale: the weakest district is the darkest, so differences of a few points stay visible
+              const vals = known.map((d) => w.distMean(d)).filter((v): v is number => v != null);
+              const lo = Math.min(...vals), hi = Math.max(...vals);
+              return (
+                <svg viewBox="0 0 430 280" className="mt-4 w-full max-w-xl" role="img" aria-label={t.mapTitle}>
+                  {known.map((d) => {
+                    const sh = shapes[d], v = w.distMean(d);
+                    const alpha = v == null ? 0.05 : hi > lo ? 0.12 + 0.7 * ((hi - v) / (hi - lo)) : 0.4;
+                    const props = { fill: `rgba(180,68,44,${alpha})`, stroke: "currentColor", strokeWidth: 1.5, className: "cursor-pointer text-ink hover:opacity-80", onClick: () => { setRole("district"); setScope(d); }, tabIndex: 0, role: "button", "aria-label": `${distLabel(d)}: ${v ?? "—"}%`, onKeyDown: (e: React.KeyboardEvent) => { if (e.key === "Enter") { setRole("district"); setScope(d); } } };
+                    return (
+                      <g key={d}>
+                        {sh.d ? <path d={sh.d} {...props} /> : <circle cx={sh.c![0]} cy={sh.c![1]} r={sh.c![2]} {...props} />}
+                        <text x={sh.lx} y={sh.ly} textAnchor="middle" className="pointer-events-none fill-current font-mono text-[11px]">{distLabel(d).replace(" район", "").replace(" ауданы", "")} {v ?? "—"}%</text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              );
+            })()}
+          </div>
+
+          <div>
             <h2 className="font-display text-2xl">{t.topicsTitle}</h2>
             <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted">
               <span className="flex items-center gap-1"><i className="inline-block h-2 w-4 bg-ink" /> {t.mean}</span>
@@ -240,6 +325,19 @@ export default function Home() {
                     <div className="absolute -top-1 -bottom-1 w-px bg-bad" style={{ left: `${TARGET}%` }} />
                   </div>
                   <span className="font-mono text-sm tabular-nums sm:text-right">{s.mean}% · {s.mastery}%</span>
+                  {s.difficult && (
+                    <button onClick={() => setOpenAction(openAction === s.topic ? "" : s.topic)} aria-expanded={openAction === s.topic} className="print:hidden justify-self-start text-sm text-accent underline underline-offset-2 sm:col-span-3">{t.showAction}</button>
+                  )}
+                  {openAction === s.topic && (() => {
+                    const act = remedialWeek(TARGET - s.mean);
+                    return (
+                      <div className="rounded-md border border-line bg-card p-4 text-[15px] sm:col-span-3">
+                        <div className="font-medium">{t.actionTitle}: {label(s.topic)}</div>
+                        <p className="mt-1">{t.actionHours(act.hours)}</p>
+                        <ol className="mt-2 grid gap-1 text-sm">{act.days.map((d) => <li key={d}>{t.days[d as keyof typeof t.days]}</li>)}</ol>
+                      </div>
+                    );
+                  })()}
                 </li>
               ))}
             </ul>
@@ -342,6 +440,22 @@ export default function Home() {
               </div>
             </div>
           )}
+          <div>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <h2 className="font-display text-2xl">{t.publisherTitle}</h2>
+              {w.issues.length > 0 && <button onClick={downloadPublisher} className="print:hidden rounded-full border border-ink px-4 py-1.5 text-sm hover:bg-ink hover:text-paper">{t.publisherBtn}</button>}
+            </div>
+            <p className="mt-2 max-w-3xl text-sm text-muted">{t.publisherNote}</p>
+            {w.issues.length === 0 ? <p className="mt-3">{t.noIssues}</p> : (
+              <ul className="mt-3 grid gap-2">
+                {w.issues.map((i) => (
+                  <li key={i.textbook + i.topic} className="rounded-md border border-line bg-card p-3 text-[15px]">
+                    <b>{i.textbook}</b> · {label(i.topic)} — <span className="font-mono">{i.pages} {t.pages}</span> <span className="text-muted">({t.median}: {i.medianPages})</span>, <span className="font-mono text-bad">{fmt(i.effect)} [{fmt(i.lo)}; {fmt(i.hi)}]</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </section>
       )}
 
@@ -392,6 +506,68 @@ export default function Home() {
             <div className="flex justify-end border-t border-ink pt-3 font-mono text-sm">
               {t.total}: {a.recs.reduce((s, r) => s + r.plan, 0)} → {a.recs.reduce((s, r) => s + r.rec, 0)}
             </div>
+          </div>
+        </section>
+      )}
+
+      {show(6) && (
+        <section className="mt-4 grid grid-cols-1 gap-10 [&>*]:min-w-0">
+          <div>
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <h2 className="font-display text-2xl">{t.didTitle}</h2>
+              <button onClick={downloadMemo} className="print:hidden rounded-full border border-ink px-4 py-1.5 text-sm hover:bg-ink hover:text-paper">{t.memo}</button>
+            </div>
+            <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.didNote}</p>
+            <p className="mt-1 max-w-3xl text-sm"><b>{t.howToRead}:</b> {t.didHow.replace(/^[^:]+: /, "")}</p>
+            {w.did.length === 0 ? <p className="mt-3 text-muted">—</p> : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[560px] text-left text-sm">
+                  <thead className="border-b border-ink text-muted"><tr>{t.didCols.map((c) => <th key={c} className="py-2 pr-3 font-normal">{c}</th>)}</tr></thead>
+                  <tbody>
+                    {w.did.map((d) => (
+                      <tr key={d.topic} className="border-b border-line">
+                        <td className="py-2 pr-3">{label(d.topic)}</td>
+                        <td className={`pr-3 font-mono tabular-nums ${d.significant ? (d.did > 0 ? "text-good" : "text-bad") : "text-muted"}`}>{fmt(d.did)} [{fmt(d.lo)}; {fmt(d.hi)}]</td>
+                        <td className="font-mono text-muted">{d.switchers} / {d.controls}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <p className="mt-2 font-mono text-[11px] text-muted">{t.didFrom}</p>
+              </div>
+            )}
+          </div>
+          <div>
+            <h2 className="font-display text-2xl">{t.moneyTitle}</h2>
+            <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.moneyNote}</p>
+            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-muted">{t.district}</span>
+              <select value={simD} onChange={(e) => setSimDistrict(e.target.value)} className="max-w-full rounded-sm border border-line bg-paper px-2 py-1" aria-label={t.district}>
+                {districts.map((d) => <option key={d} value={d}>{distLabel(d)}</option>)}
+              </select>
+              <span className="font-mono">{simStudents} {t.studentsN}</span>
+            </div>
+            <div className="mt-4 overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead className="border-b border-ink text-muted"><tr>{t.moneyCols.map((c) => <th key={c} className="py-2 pr-3 font-normal">{c}</th>)}</tr></thead>
+                <tbody>
+                  {money.map((m) => (
+                    <tr key={m.textbook} className="border-b border-line">
+                      <td className="py-2 pr-3 font-medium">{m.textbook}</td>
+                      <td className="pr-3 font-mono tabular-nums">{fmtT(m.price)}</td>
+                      <td className="pr-3 font-mono tabular-nums">{fmtT(m.cost)}</td>
+                      <td className="pr-3 font-mono tabular-nums">{m.extraCost ? `+${fmtT(m.extraCost)}` : "—"}</td>
+                      <td className="pr-3 font-mono tabular-nums">{fmt(m.effect)} <span className="text-muted">[{fmt(m.lo)}; {fmt(m.hi)}]</span></td>
+                      <td className="text-[13px]">{m.perPoint != null ? <span className="font-mono">{fmtT(m.perPoint)} ₸</span> : <span className="text-muted">{t.notProven}</span>}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {(() => {
+              const top = [...money].filter((m) => m.extraCost > 0 && m.perPoint == null).sort((x, y) => y.extraCost - x.extraCost)[0];
+              return top ? <p className="mt-3 max-w-3xl rounded-md border-l-4 border-bad bg-card p-3 text-[15px]">{t.moneyVerdict(top.textbook, fmtT(top.extraCost))}</p> : null;
+            })()}
           </div>
         </section>
       )}
