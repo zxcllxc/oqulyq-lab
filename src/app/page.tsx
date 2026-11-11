@@ -5,6 +5,7 @@ import { BOOKS, COVERAGE, DISTRICTS, generateDemo, ITEMS, ITEM_TOPIC, TOPICS, ty
 import { classTopics, hourRecs, PASS, TARGET, textbookEffects, topicStats } from "@/lib/analytics";
 import { earlyWarnings, itemAnalysis, quarterDynamics } from "@/lib/diagnostics";
 import { T, type Lang } from "@/lib/i18n";
+import { parseImport, type Quality } from "@/lib/importer";
 
 const DEMO = generateDemo();
 // shortcut: assumed +2.5 p.p. per extra hour (demo assumption), estimate from real hour variation between schools when data has it
@@ -13,7 +14,6 @@ const DEMO_HOURS = Object.fromEntries(TOPICS.map((t) => [t.name, t.hours]));
 const TOPIC_BY_NAME = Object.fromEntries(TOPICS.map((t) => [t.name, t]));
 const KEYS = ITEMS.map((i) => i.key);
 type Role = "region" | "district" | "school" | "admin";
-type Quality = { total: number; ok: number; rejected: Record<string, number>; noBaseline: boolean };
 
 export default function Home() {
   const [lang, setLang] = useState<Lang>("ru");
@@ -111,26 +111,11 @@ export default function Home() {
     setErr("");
     setQuality(null);
     try {
+      if (f.size > 10 * 1024 * 1024) throw new Error("too big"); // 10 MB ≈ 300k rows; bigger files go through the server import queue
       const wb = XLSX.read(await f.arrayBuffer());
       const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]]);
-      const lower = json.map((r) => Object.fromEntries(Object.entries(r).map(([k, v]) => [k.trim().toLowerCase(), v])));
-      if (!lower.length || !["school", "class", "textbook", "topic", "score"].every((k) => k in lower[0])) throw new Error("columns");
-      const h: Record<string, number> = {};
-      const rejected = { missing: 0, range: 0, nan: 0, dup: 0 };
-      const seen = new Set<string>();
-      const parsed: Row[] = [];
-      for (const r of lower) {
-        const s = (k: string) => (r[k] == null ? "" : String(r[k]).trim());
-        if (!s("school") || !s("class") || !s("textbook") || !s("topic") || s("score") === "") { rejected.missing++; continue; }
-        const score = Number(String(r.score).replace(",", "."));
-        if (!Number.isFinite(score)) { rejected.nan++; continue; }
-        if (score < 0 || score > 100) { rejected.range++; continue; }
-        if (s("student")) { const k = `${s("school")}|${s("class")}|${s("student")}|${s("topic")}`; if (seen.has(k)) { rejected.dup++; continue; } seen.add(k); }
-        if (r.hours != null) h[s("topic")] = Number(r.hours);
-        const q = Number(r.quarter);
-        parsed.push({ district: s("district") || "—", school: s("school"), cls: s("class"), textbook: s("textbook"), topic: s("topic"), quarter: q >= 1 && q <= 4 ? q : TOPIC_BY_NAME[s("topic")]?.quarter ?? 1, score, baseline: Number(r.baseline ?? 60) || 60 });
-      }
-      setQuality({ total: lower.length, ok: parsed.length, rejected, noBaseline: !("baseline" in lower[0]) });
+      const { rows: parsed, quality: qr, hours: h } = parseImport(json);
+      setQuality(qr);
       if (!parsed.length) throw new Error("empty");
       setRows(parsed);
       setResponses([]);
@@ -207,7 +192,7 @@ export default function Home() {
       </nav>
 
       {show(0) && (
-        <section className="mt-4 grid gap-10">
+        <section className="mt-4 grid grid-cols-1 gap-10 [&>*]:min-w-0">
           <div className="grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line sm:grid-cols-4">
             {([[view.rs.length, t.students], [a.classes, t.classes], [a.schools, t.schools], [a.topics.length, t.topics]] as const).map(([n, l]) => (
               <div key={l} className="bg-paper p-4">
@@ -281,7 +266,7 @@ export default function Home() {
       )}
 
       {show(1) && (
-        <section className="mt-4 grid gap-10">
+        <section className="mt-4 grid grid-cols-1 gap-10 [&>*]:min-w-0">
           <div>
             <h2 className="font-display text-2xl">{t.booksTitle}</h2>
             <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.booksNote}</p>
@@ -293,7 +278,7 @@ export default function Home() {
                 <tbody>
                   {a.eff.overall.map((e) => (
                     <tr key={e.textbook} className="border-b border-line">
-                      <td className="py-3 pr-3 font-medium">{e.textbook}<div className="font-mono text-xs font-normal text-muted">{e.k} {t.k}</div></td>
+                      <td className="py-3 pr-3 font-medium">{e.textbook}<div className="font-mono text-xs font-normal text-muted">k = {e.k} ({t.k})</div></td>
                       <td className="pr-3 font-mono tabular-nums">{e.baseline}%</td>
                       <td className="pr-3 font-mono tabular-nums">{e.naive}%</td>
                       <td className="pr-3 font-mono tabular-nums">{fmt(e.effect)} <span className="text-muted">[{fmt(e.lo)}; {fmt(e.hi)}]</span></td>
@@ -448,7 +433,7 @@ export default function Home() {
       )}
 
       {show(4) && (
-        <section className="mt-4 grid gap-10">
+        <section className="mt-4 grid grid-cols-1 gap-10 [&>*]:min-w-0">
           <div>
             <h2 className="font-display text-2xl">{t.dynTitle}</h2>
             <p className="mt-2 max-w-3xl text-[15px] text-muted">{t.dynNote}</p>
@@ -508,7 +493,7 @@ export default function Home() {
       )}
 
       {show(5) && (
-        <section className="mt-4 grid gap-10 lg:grid-cols-2">
+        <section className="mt-4 grid grid-cols-1 gap-10 [&>*]:min-w-0 lg:grid-cols-2">
           <div className="print:hidden">
             <h2 className="font-display text-2xl">{t.upload}</h2>
             <p className="mt-2 text-sm text-muted">{t.uploadHint}</p>
