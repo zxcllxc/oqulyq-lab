@@ -101,35 +101,30 @@ export function hourRecs(stats: TopicStat[], hours: Record<string, number>, cell
     if (gap > 0 && worst && worst.effect <= -gap / 2) cause = "textbook";
     else if (gap > 0) { cause = "hours"; want = Math.min(3, Math.max(1, Math.round(gap / 7))); }
     else if (s.mean >= TARGET) cause = "surplus";
-    return { topic: s.topic, plan, rec: plan + want, delta: want, mean: s.mean, cause, weakBook: worst?.textbook, why: "" };
+    return { topic: s.topic, plan, rec: plan, delta: 0, mean: s.mean, cause, weakBook: worst?.textbook, why: "", want } as HourRec & { want: number };
   });
-  let need = recs.reduce((s, r) => s + r.delta, 0);
   const donors = recs.filter((r) => r.cause === "surplus").sort((x, y) => y.mean - x.mean);
-  let progress = true;
-  while (need > 0 && progress) {
-    progress = false;
-    for (const d of donors) {
-      if (need === 0) break;
-      if (d.rec - 1 >= Math.ceil(d.plan * 0.75)) { d.rec--; d.delta--; need--; progress = true; }
-    }
-  }
-  if (need > 0) {
-    // not enough donors: trim the smallest-gap receivers
-    for (const r of [...recs].filter((r) => r.cause === "hours").sort((x, y) => y.mean - x.mean)) {
-      while (need > 0 && r.delta > 0) { r.delta--; r.rec--; need--; }
-    }
-  }
+  let supply = donors.reduce((s, d) => s + d.plan - Math.ceil(d.plan * 0.75), 0);
+  // round-robin by largest gap: every deficit topic gets its 1st hour before anyone gets a 2nd
+  const receivers = recs.filter((r) => r.cause === "hours").sort((x, y) => x.mean - y.mean) as (HourRec & { want: number })[];
+  let given = 0;
+  for (let round = 1; round <= 3 && supply > 0; round++)
+    for (const r of receivers) if (supply > 0 && r.want >= round) { r.delta++; r.rec++; supply--; given++; }
+  while (given > 0)
+    for (const d of donors) if (given > 0 && d.rec - 1 >= Math.ceil(d.plan * 0.75)) { d.rec--; d.delta--; given--; }
   const donorNames = donors.filter((d) => d.delta < 0).map((d) => `«${label(d.topic)}» (${d.mean}%)`).join(", ");
   for (const r of recs) {
     const gap = r1(TARGET - r.mean);
     if (lang === "ru") {
       r.why =
+        r.cause === "hours" && r.delta === 0 ? `Средний балл ${r.mean}% ниже цели на ${gap} п.п., но свободные часы ушли темам с бо́льшим отставанием. Следующий кандидат на часы.` :
         r.cause === "hours" ? `Средний балл ${r.mean}% ниже цели ${TARGET}% на ${gap} п.п. во всех учебниках — это дефицит времени, а не учебника. +${r.delta} ч из тем: ${donorNames || "резерв"}.` :
         r.cause === "textbook" ? `Отставание ${gap} п.п. объясняется главой «${r.weakBook}»: её классы ниже ожидаемого. Часы не добавляем — заменить/дополнить главу.` :
         r.cause === "surplus" ? (r.delta < 0 ? `Балл ${r.mean}% выше цели на ${r1(-gap)} п.п. Можно отдать ${-r.delta} ч, не опускаясь ниже 75% плана.` : `Балл ${r.mean}% выше цели, запас есть, но часы не потребовались.`) :
         `Балл ${r.mean}% около цели — оставить как есть.`;
     } else {
       r.why =
+        r.cause === "hours" && r.delta === 0 ? `Орташа балл ${r.mean}%, мақсаттан ${gap} п.п. төмен, бірақ бос сағаттар артта қалуы көбірек тақырыптарға берілді. Келесі кандидат.` :
         r.cause === "hours" ? `Орташа балл ${r.mean}%, мақсаттан (${TARGET}%) ${gap} п.п. төмен, барлық оқулықта — бұл уақыт тапшылығы. +${r.delta} сағ мына тақырыптардан: ${donorNames || "резерв"}.` :
         r.cause === "textbook" ? `${gap} п.п. артта қалу «${r.weakBook}» тарауына байланысты. Сағат қоспаймыз — тарауды ауыстыру/толықтыру керек.` :
         r.cause === "surplus" ? (r.delta < 0 ? `Балл ${r.mean}%, мақсаттан ${r1(-gap)} п.п. жоғары. ${-r.delta} сағ беруге болады (жоспардың 75%-нан төмен емес).` : `Балл ${r.mean}% мақсаттан жоғары, сағат қажет болмады.`) :
