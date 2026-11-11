@@ -8,6 +8,7 @@ import { differenceInDifferences, publisherIssues, remedialWeek, schoolTopicMean
 import { truthCheck, whereIsCause } from "@/lib/cause";
 import { T, type Lang } from "@/lib/i18n";
 import { parseImport, type Quality } from "@/lib/importer";
+import { smartMap, type Mapping } from "@/lib/smartImport";
 
 const DEMO = generateDemo();
 const PREV = generatePrevYear(DEMO.rows);
@@ -37,6 +38,10 @@ export default function Home() {
   const [mapTopic, setMapTopic] = useState("");
   const [openAction, setOpenAction] = useState("");
   const [showTruth, setShowTruth] = useState(false);
+  const [rawImport, setRawImport] = useState<Record<string, unknown>[] | null>(null);
+  const [overrides, setOverrides] = useState<Record<string, Mapping["field"]>>({});
+  const [pasted, setPasted] = useState("");
+  const smart = useMemo(() => (rawImport ? smartMap(rawImport, overrides) : null), [rawImport, overrides]);
   const t = T[lang];
   const show = (i: number) => tab === i || all;
   const label = (topic: string) => (lang === "kk" ? TOPIC_BY_NAME[topic]?.kk : lang === "en" ? TOPIC_BY_NAME[topic]?.en : undefined) || topic;
@@ -138,8 +143,34 @@ export default function Home() {
     try {
       if (f.size > 10 * 1024 * 1024) throw new Error("too big"); // 10 MB ≈ 300k rows; bigger files go through the server import queue
       const wb = XLSX.read(await f.arrayBuffer());
-      const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]]);
-      const { rows: parsed, quality: qr, hours: h } = parseImport(json);
+      const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+      if (!json.length) throw new Error("empty");
+      setOverrides({});
+      setRawImport(json);
+    } catch {
+      setErr(t.err);
+    }
+  }
+
+  function parsePasted() {
+    setErr("");
+    try {
+      const wb = XLSX.read(pasted, { type: "string" });
+      const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
+      if (!json.length) throw new Error("empty");
+      setOverrides({});
+      setRawImport(json);
+    } catch {
+      setErr(t.err);
+    }
+  }
+
+  function confirmImport() {
+    if (!smart) return;
+    setErr("");
+    setQuality(null);
+    try {
+      const { rows: parsed, quality: qr, hours: h } = parseImport(smart.records);
       setQuality(qr);
       if (!parsed.length) throw new Error("empty");
       setRows(parsed);
@@ -148,6 +179,7 @@ export default function Home() {
       setIsDemo(false);
       setRole("region");
       setScope("all");
+      setRawImport(null);
     } catch {
       setErr(t.err);
     }
@@ -672,14 +704,47 @@ export default function Home() {
       {show(5) && (
         <section className="mt-4 grid grid-cols-1 gap-10 [&>*]:min-w-0 lg:grid-cols-2">
           <div className="print:hidden">
-            <h2 className="font-display text-2xl">{t.upload}</h2>
-            <p className="mt-2 text-sm text-muted">{t.uploadHint}</p>
+            <h2 className="font-display text-2xl">{t.smartTitle}</h2>
+            <p className="mt-2 text-[15px] text-muted">{t.smartNote}</p>
+            <p className="mt-2 rounded-md border-l-4 border-good bg-card p-2 text-sm">{t.privacy}</p>
             <label className="mt-4 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-md border-2 border-dashed border-ink/30 p-8 text-center hover:border-ink">
               <span className="font-mono text-sm">.csv · .xlsx</span>
               <span className="text-sm">{t.upload}</span>
               <input name="import-file" type="file" accept=".csv,.xlsx,.xls" className="sr-only" onChange={(e) => e.target.files?.[0] && onFile(e.target.files[0])} />
             </label>
+            <textarea name="paste" value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder={t.paste} rows={3} className="mt-3 w-full rounded-md border border-line bg-paper p-2 font-mono text-xs" />
+            {pasted.trim() && <button onClick={parsePasted} className="mt-1 rounded-full border border-ink px-4 py-1.5 text-sm hover:bg-ink hover:text-paper">{t.parsePaste}</button>}
             {err && <p className="mt-2 text-sm text-bad" role="alert">{err}</p>}
+            {smart && (
+              <div className="mt-4 rounded-md border border-ink p-4">
+                <h3 className="font-display text-xl">{t.confirmTitle}</h3>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead className="border-b border-ink text-muted"><tr>{t.colHeader.map((c) => <th key={c} className="py-1 pr-2 font-normal">{c}</th>)}</tr></thead>
+                    <tbody>
+                      {smart.mapping.map((m) => (
+                        <tr key={m.column} className={`border-b border-line ${m.sure ? "" : "bg-amber/30"}`}>
+                          <td className="py-1 pr-2 font-mono text-xs">{m.column}</td>
+                          <td className="pr-2">
+                            <select name={`map-${m.column}`} aria-label={m.column} value={m.field ?? ""} onChange={(e) => setOverrides({ ...overrides, [m.column]: (e.target.value || null) as Mapping["field"] })} className="rounded-sm border border-line bg-paper px-1 py-0.5">
+                              <option value="">{t.fields.none}</option>
+                              {(["school", "class", "textbook", "topic", "score", "baseline", "district", "quarter", "hours", "student", "topicColumn"] as const).map((f) => <option key={f} value={f}>{t.fields[f]}</option>)}
+                            </select>
+                          </td>
+                          <td className={m.sure ? "text-good" : "text-[#7a5a00]"}>{m.field == null ? "—" : m.sure ? t.sure : t.unsure}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="mt-2 font-mono text-xs">{t.smartStats(smart.records.length, smart.filled, smart.anonymized, smart.wide)}</p>
+                {smart.missing.length > 0 && <p className="mt-1 text-sm text-bad">{t.missingF(smart.missing.map((f) => t.fields[f]).join(", "))}</p>}
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button onClick={confirmImport} disabled={smart.missing.length > 0} className="rounded-full bg-ink px-4 py-1.5 text-sm text-paper disabled:opacity-40">{t.load(smart.records.length)}</button>
+                  <button onClick={() => setRawImport(null)} className="rounded-full px-4 py-1.5 text-sm hover:bg-line">{t.cancel}</button>
+                </div>
+              </div>
+            )}
             {quality && (
               <div className="mt-4 rounded-md border border-line bg-card p-4 text-sm">
                 <h3 className="font-medium">{t.quality}</h3>
