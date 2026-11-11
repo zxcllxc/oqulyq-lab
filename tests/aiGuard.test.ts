@@ -52,3 +52,14 @@ test("AI column mapping: only headers go out; reply parsed strictly", async () =
   assert.deepEqual(m, { "Оқушы аты": "student", "Жиынтық": "score" });
   assert.deepEqual(parseMapping("не JSON", cols), {});
 });
+
+test("small numbers with units must be grounded; citations must exist", async () => {
+  const { numbersGrounded, citationsValid } = await import("../src/lib/aiGuard");
+  const fs = [{ id: "H1", text: "План: «Дроби» 13→14 ч" }];
+  assert.equal(numbersGrounded("Добавить 3 ч к дробям [H1]", fs).ok, false);
+  assert.equal(numbersGrounded("3 шага на неделю [H1]", fs).ok, true);
+  assert.equal(citationsValid("Дроби 13→14 [H1]", fs), true);
+  assert.equal(citationsValid("Дроби 13→14 [H9]", fs), false);
+  assert.equal(citationsValid("см. https://evil.example [H1]", fs), false);
+  assert.equal(citationsValid("Без ссылок вообще", fs), false);
+});

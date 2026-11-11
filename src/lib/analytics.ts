@@ -86,10 +86,13 @@ function effectOf(textbook: string, topic: string | null, vals: number[], adjust
   const lo = m - half, hi = m + half;
   let verdict: Verdict = k < 3 ? "few" : !adjusted ? "noadj" : lo > 0 && m >= MIN_EFFECT ? "better" : hi < 0 && m <= -MIN_EFFECT ? "worse" : "same";
   // a textbook is blamed only if the gap survives dropping its 2 weakest classes; otherwise 1–2 classes drive it
-  if (verdict === "worse") {
-    const rest = [...vals].sort((a, b) => a - b).slice(2);
+  // symmetric: "better" must also survive dropping its 2 strongest classes (k >= 5 needed for either verdict)
+  if (verdict === "worse" || verdict === "better") {
+    const sorted = [...vals].sort((a, b) => a - b);
+    const rest = verdict === "worse" ? sorted.slice(2) : sorted.slice(0, -2);
     const k2 = rest.length, m2 = mean(rest), h2 = k2 > 1 ? (t95(k2 - 1) * sd(rest)) / Math.sqrt(k2) : Infinity;
-    if (k2 < 3 || !(m2 + h2 < 0 && m2 <= -MIN_EFFECT)) verdict = "local";
+    const holds = verdict === "worse" ? m2 + h2 < 0 && m2 <= -MIN_EFFECT : m2 - h2 > 0 && m2 >= MIN_EFFECT;
+    if (k2 < 3 || !holds) verdict = "local";
   }
   return { textbook, topic, effect: r1(m), lo: r1(lo), hi: r1(hi), k, verdict };
 }

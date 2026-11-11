@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import { LIMITS, makeLimiter, mapPrompt, numbersGrounded, parseMapping, sanitizeColumns, sanitizeFacts, sanitizeQuestion, systemPrompt, userPrompt } from "@/lib/aiGuard";
+import { citationsValid, LIMITS, makeLimiter, mapPrompt, numbersGrounded, parseMapping, sanitizeColumns, sanitizeFacts, sanitizeQuestion, systemPrompt, userPrompt } from "@/lib/aiGuard";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -11,6 +11,7 @@ const reply = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
 export async function POST(req: Request) {
+  if (Number(req.headers.get("content-length") ?? 0) > 40_000) return reply({ fallback: true, reason: "too_big" }, 413);
   const raw = await req.text();
   if (raw.length > 40_000) return reply({ fallback: true, reason: "too_big" }, 413);
   let body: { mode?: unknown; facts?: unknown; question?: unknown; lang?: unknown };
@@ -22,7 +23,8 @@ export async function POST(req: Request) {
   const columns = sanitizeColumns((body as { columns?: unknown }).columns);
   if (mode === "map" ? !columns.length : !facts.length || (mode === "ask" && !question)) return reply({ fallback: true, reason: "empty" }, 400);
 
-  const ip = (req.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim();
+  // on Vercel the platform sets x-real-ip / x-forwarded-for; per-instance memory — the gateway budget is the hard cap
+  const ip = (req.headers.get("x-real-ip") ?? req.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim();
   const ok = limit(ip);
   if (ok !== "ok") return reply({ fallback: true, reason: ok === "ip" ? "rate_ip" : "rate_day" }, 429);
   // no credentials at all (local dev without key): skip the network call
@@ -43,6 +45,7 @@ export async function POST(req: Request) {
     });
     const g = numbersGrounded(text, facts);
     if (!g.ok) return reply({ fallback: true, reason: "ungrounded", stray: g.stray.slice(0, 5) }, 422);
+    if (!citationsValid(text, facts)) return reply({ fallback: true, reason: "bad_citations" }, 422);
     return reply({ text, model: MODEL });
   } catch (e) {
     const msg = String((e as Error)?.message ?? e);

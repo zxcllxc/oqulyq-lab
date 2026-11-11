@@ -71,7 +71,11 @@ export function smartMap(raw: Record<string, unknown>[], overrides: Record<strin
       if (m.field === "student") { if (v != null && v !== "") { v = code(String(v).trim()); anonymized++; } }
       if (FILL_DOWN.includes(m.field as Field)) {
         if (v == null || v === "") { if (last[m.field as Field] != null) { v = last[m.field as Field]; filled++; } }
-        else last[m.field as Field] = v;
+        else {
+          // a new school (or district) starts a new block: lower levels must not leak from the previous one
+          if (last[m.field as Field] !== v && (m.field === "district" || m.field === "school")) for (const lower of FILL_DOWN.slice(FILL_DOWN.indexOf(m.field as Field) + 1)) delete last[lower];
+          last[m.field as Field] = v;
+        }
       }
       base[m.field] = v;
     }

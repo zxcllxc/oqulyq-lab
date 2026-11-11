@@ -29,7 +29,7 @@ const L = {
   ru: {
     topic: (t: string, m: number, p: number) => `Тема «${t}»: средний балл ${m}%, усвоили ${p}% учеников (цель 70%).`,
     book: (b: string, n: number, base: number, e: string, lo: string, hi: string, k: number) => `«${b}»: средний ${n}%, уровень классов на входе ${base}%, честный эффект ${e} п.п. [${lo}; ${hi}], ${k} классов.`,
-    cell: (b: string, t: string, e: string, lo: string, hi: string, local: boolean) => `«${b}», тема «${t}»: ${e} п.п. к ожидаемому [${lo}; ${hi}]${local ? ", но отставание дают 1–2 класса" : ""}.`,
+    cell: (b: string, t: string, e: string, lo: string, hi: string, local: boolean) => `«${b}», тема «${t}»: ${e} п.п. к ожидаемому [${lo}; ${hi}]${local ? ", но разницу дают 1–2 класса" : ""}.`,
     hours: (list: string, total: number) => `План часов: ${list}; общий объём ${total} ч не меняется.`,
     h: "ч",
     item: (n: number, p: number, r: number, trap?: string) => `Вопрос ${n}: решили ${p}%, различающая способность r = ${r}${trap ? `, сильные ученики выбирают «${trap}»` : ""}.`,
@@ -61,7 +61,7 @@ const L = {
   kk: {
     topic: (t: string, m: number, p: number) => `«${t}» тақырыбы: орташа балл ${m}%, меңгерген оқушылар ${p}% (мақсат 70%).`,
     book: (b: string, n: number, base: number, e: string, lo: string, hi: string, k: number) => `«${b}»: орташа ${n}%, сыныптардың бастапқы деңгейі ${base}%, әділ әсер ${e} п.п. [${lo}; ${hi}], ${k} сынып.`,
-    cell: (b: string, t: string, e: string, lo: string, hi: string, local: boolean) => `«${b}», «${t}» тақырыбы: күтілгенге ${e} п.п. [${lo}; ${hi}]${local ? ", бірақ артта қалуды 1–2 сынып береді" : ""}.`,
+    cell: (b: string, t: string, e: string, lo: string, hi: string, local: boolean) => `«${b}», «${t}» тақырыбы: күтілгенге ${e} п.п. [${lo}; ${hi}]${local ? ", бірақ айырманы 1–2 сынып береді" : ""}.`,
     hours: (list: string, total: number) => `Сағат жоспары: ${list}; жалпы көлем ${total} сағ өзгермейді.`,
     h: "сағ",
     item: (n: number, p: number, r: number, trap?: string) => `${n}-сұрақ: шешкендер ${p}%, ажырату қабілеті r = ${r}${trap ? `, күшті оқушылар «${trap}» таңдайды` : ""}.`,
@@ -93,7 +93,7 @@ const L = {
   en: {
     topic: (t: string, m: number, p: number) => `Topic “${t}”: mean ${m}%, mastered by ${p}% of students (target 70%).`,
     book: (b: string, n: number, base: number, e: string, lo: string, hi: string, k: number) => `“${b}”: mean ${n}%, class entry level ${base}%, fair effect ${e} p.p. [${lo}; ${hi}], ${k} classes.`,
-    cell: (b: string, t: string, e: string, lo: string, hi: string, local: boolean) => `“${b}”, topic “${t}”: ${e} p.p. vs expected [${lo}; ${hi}]${local ? ", but 1–2 classes drive the gap" : ""}.`,
+    cell: (b: string, t: string, e: string, lo: string, hi: string, local: boolean) => `“${b}”, topic “${t}”: ${e} p.p. vs expected [${lo}; ${hi}]${local ? ", but 1–2 classes drive the difference" : ""}.`,
     hours: (list: string, total: number) => `Hours plan: ${list}; total ${total} h unchanged.`,
     h: "h",
     item: (n: number, p: number, r: number, trap?: string) => `Item ${n}: solved by ${p}%, discrimination r = ${r}${trap ? `, strong students pick “${trap}”` : ""}.`,

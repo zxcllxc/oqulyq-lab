@@ -44,12 +44,25 @@ export function numbersGrounded(answer: string, facts: AiFact[]): { ok: boolean;
   for (const f of facts) for (const m of `${f.id} ${f.text}`.match(NUM) ?? []) { allowed.add(norm(m)); allowed.add(norm(m).replace(/^-/, "")); }
   const stray: string[] = [];
   const text = answer.replace(/\[[A-Za-z]+\d+\]/g, " ").replace(/(^|\n)\s*\d+[.)]\s/g, "$1 ");
-  for (const m of text.match(NUM) ?? []) {
+  const re = new RegExp(NUM.source, "g");
+  for (let mm = re.exec(text); mm; mm = re.exec(text)) {
+    const m = mm[0];
     const n = norm(m);
-    if (/^[1-3]$/.test(n.replace(/^-/, ""))) continue; // small counts ("3 шага", "1–2 класса") are wording, not data
+    const after = text.slice(mm.index + m.length, mm.index + m.length + 6).toLowerCase();
+    // small counts ("3 шага", "1–2 класса") are wording; with a data unit (hours, p.p., %) they must be grounded
+    if (/^[1-3]$/.test(n.replace(/^-/, "")) && !/^\s*(ч|сағ|h\b|п\.?\s?п|p\.?\s?p|%)/.test(after)) continue;
     if (!allowed.has(n) && !allowed.has(n.replace(/^-/, ""))) stray.push(m);
   }
   return { ok: stray.length === 0, stray };
+}
+
+/** Every [ID] cited must be a real fact and at least one must be cited; no links or markup. */
+export function citationsValid(answer: string, facts: AiFact[]): boolean {
+  const ids = new Set(facts.map((f) => f.id));
+  if (/https?:\/\/|<\/?[a-z]|!\[|\]\(/i.test(answer)) return false;
+  if (/^(Не знаю|Білмеймін|I don.t know)/.test(answer.trim())) return true;
+  const cited = [...answer.matchAll(/\[([A-Za-z]+\d+)\]/g)].map((m) => m[1]);
+  return cited.length > 0 && cited.every((id) => ids.has(id));
 }
 
 /** Fixed-window limiter (per server instance). Good enough as abuse protection; the gateway budget is the hard cap. */

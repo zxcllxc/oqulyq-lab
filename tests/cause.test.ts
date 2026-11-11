@@ -58,3 +58,16 @@ test("honesty check: the method recovers the effects injected into the demo gene
   assert.ok(tc.mae < 1.5, `MAE ${tc.mae}`);
   assert.ok(tc.inCI >= 80, `in CI ${tc.inCI}%`);
 });
+
+test("'better' also needs to survive dropping its 2 strongest classes", () => {
+  const rows: Row[] = [];
+  const books = ["X", "Y", "Z"];
+  for (let b = 0; b < 3; b++) for (let c = 0; c < 8; c++) {
+    const baseline = 50 + ((c * 7 + b * 3) % 20);
+    let mean = 10 + 0.8 * baseline + ((c + b) % 3) - 1;
+    if (b === 0 && c < 2) mean += 20; // two star classes with book X
+    for (let s = 0; s < 10; s++) rows.push({ district: "D", school: `S${b}-${c}`, cls: "7A", textbook: books[b], topic: "T", quarter: 1, score: mean + ((s % 5) - 2), baseline });
+  }
+  const e = textbookEffects(classTopics(rows), ["T"]);
+  assert.notEqual(e.cells.find((x) => x.textbook === "X")!.verdict, "better");
+});

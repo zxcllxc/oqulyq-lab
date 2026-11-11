@@ -35,3 +35,15 @@ test("unknown layout reports the missing required fields", () => {
   const r = smartMap([{ foo: "x", bar: "y" }]);
   assert.ok(r.missing.includes("school") && r.missing.includes("score"));
 });
+
+test("fill-down does not leak class/textbook from the previous school; textbook stays within a school", () => {
+  const raw = [
+    { "Школа": "№1", "Класс": "7А", "Учебник": "А", "Тема": "Т", "Балл": 50 },
+    { "Школа": "", "Класс": "7Б", "Учебник": "", "Тема": "Т", "Балл": 60 },
+    { "Школа": "№2", "Класс": "", "Учебник": "", "Тема": "Т", "Балл": 70 },
+  ];
+  const r = smartMap(raw);
+  assert.equal(r.records[1].textbook, "А"); // same school, new class keeps the school's textbook
+  assert.equal(r.records[2].class, ""); // new school: previous class must not leak
+  assert.equal(r.records[2].textbook, "");
+});

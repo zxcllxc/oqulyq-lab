@@ -91,7 +91,6 @@ export default function Home() {
   useEffect(() => {
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.lang = lang === "kk" ? "kk" : lang;
-    try { localStorage.setItem("oq-theme", dark ? "dark" : "light"); localStorage.setItem("oq-lang", lang); } catch {}
   }, [dark, lang]);
 
   const districts = useMemo(() => [...new Set(rows.map((r) => r.district))], [rows]);
@@ -301,12 +300,12 @@ export default function Home() {
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex overflow-hidden rounded-full border border-ink text-sm" role="group" aria-label="language">
               {(["ru", "kk", "en"] as Lang[]).map((l) => (
-                <button key={l} onClick={() => setLang(l)} className={`px-3 py-1 ${lang === l ? "bg-ink text-paper" : ""}`} aria-pressed={lang === l}>
+                <button key={l} onClick={() => { setLang(l); try { localStorage.setItem("oq-lang", l); } catch {} }} className={`px-3 py-1 ${lang === l ? "bg-ink text-paper" : ""}`} aria-pressed={lang === l}>
                   {l === "ru" ? "Рус" : l === "kk" ? "Қаз" : "Eng"}
                 </button>
               ))}
             </div>
-            <button onClick={() => setDark(!dark)} aria-label={t.theme} title={t.theme} className="print:hidden rounded-full border border-ink px-3 py-1 text-sm">{dark ? "☀" : "☾"}</button>
+            <button onClick={() => { setDark(!dark); try { localStorage.setItem("oq-theme", dark ? "light" : "dark"); } catch {} }} aria-label={t.theme} title={t.theme} className="print:hidden rounded-full border border-ink px-3 py-1 text-sm">{dark ? "☀" : "☾"}</button>
             <button onClick={printReport} className="print:hidden rounded-full border border-ink px-3 py-1 text-sm hover:bg-ink hover:text-paper">{t.report}</button>
           </div>
           <span className={`rounded-sm px-2 py-0.5 font-mono text-[11px] ${isDemo ? "bg-amber text-[#1c1b17]" : "bg-good text-paper"}`}>{isDemo ? t.demo : `${t.imported}: ${rows.length} ${t.rows}`}</span>
