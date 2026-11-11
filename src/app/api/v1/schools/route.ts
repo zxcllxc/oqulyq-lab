@@ -4,8 +4,8 @@ export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   const p = new URL(req.url).searchParams;
-  const limit = Math.min(100, Math.max(1, Number(p.get("limit")) || 20));
-  const page = Math.max(1, Number(p.get("page")) || 1);
+  const limit = Math.min(100, Math.max(1, Math.floor(Number(p.get("limit"))) || 20));
+  const page = Math.min(10000, Math.max(1, Math.floor(Number(p.get("page"))) || 1)); // clamp: Infinity/1e21 would reach OFFSET
   const d = Number(p.get("district"));
   const where = Number.isInteger(d) && d > 0 ? `WHERE s.district_id = ${d}` : "";
   const db = await getDb();

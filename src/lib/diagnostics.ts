@@ -1,5 +1,7 @@
 import type { Response } from "./data";
-import { fairModel, type ClassTopic } from "./analytics";
+import { fairModel, t95, type ClassTopic } from "./analytics";
+
+const MIN_ITEM_N = 30; // fewer answers: shares are too noisy to flag an item
 
 const mean = (a: number[]) => a.reduce((s, x) => s + x, 0) / (a.length || 1);
 const variance = (a: number[]) => {
@@ -41,12 +43,14 @@ export function itemAnalysis(responses: Response[], keys: string[]): ItemStat[] 
     const topChoices = share(top);
     const key = keys[item];
     const flags: ItemStat["flags"] = [];
-    if (rpb < 0.15) flags.push("bad");
-    if (mx < 0.2) flags.push("hard");
-    if (mx > 0.95) flags.push("easy");
+    const enough = rs.length >= MIN_ITEM_N;
+    if (enough && sx > 0 && rpb < 0.15) flags.push("bad"); // sx = 0: everyone right or wrong, rpb undefined, not a broken key
+    if (enough && mx < 0.2) flags.push("hard");
+    if (enough && mx > 0.95) flags.push("easy");
     const trap = Object.entries(topChoices).filter(([k]) => k !== key).sort((a, b) => b[1] - a[1])[0];
-    if (trap && trap[1] >= 0.25) flags.push("trap");
-    return { item, key, n: rs.length, p: r2(mx), rpb: r2(rpb), choices: share(rs), topChoices, flags, trap: trap && trap[1] >= 0.25 ? trap[0] : undefined };
+    const isTrap = enough && !!trap && trap[1] >= 0.25;
+    if (isTrap) flags.push("trap");
+    return { item, key, n: rs.length, p: r2(mx), rpb: r2(rpb), choices: share(rs), topChoices, flags, trap: isTrap ? trap[0] : undefined };
   });
 }
 
@@ -54,10 +58,15 @@ export type Warning = { key: string; district: string; school: string; cls: stri
 
 /**
  * Early warning: compare a class's residual (fact − expectation from the fair model) in Q1–Q2 vs Q3–Q4.
- * Flag when the drop is ≥ 4 p.p. and its 95% CI (Welch) is entirely below zero.
+ * Residuals are net of the topic×textbook chapter effect. Flag when the drop is ≥ 4 p.p. and its 95% CI
+ * (Welch, t with conservative df = min(n1, n2) − 1) is entirely below zero.
  */
 export function earlyWarnings(cts: ClassTopic[]): Warning[] {
-  const { resid } = fairModel(cts);
+  const { resid: raw } = fairModel(cts);
+  // remove the topic×textbook chapter effect: a weak Q3–Q4 chapter is a textbook problem, not a class sliding
+  const cell = new Map<string, number[]>();
+  for (const r of raw) cell.set(`${r.topic}|${r.textbook}`, [...(cell.get(`${r.topic}|${r.textbook}`) ?? []), r.resid]);
+  const resid = raw.map((r) => ({ ...r, resid: r.resid - mean(cell.get(`${r.topic}|${r.textbook}`)!) }));
   const byClass = new Map<string, typeof resid>();
   for (const r of resid) byClass.set(r.key, [...(byClass.get(r.key) ?? []), r]);
   const out: Warning[] = [];
@@ -67,7 +76,8 @@ export function earlyWarnings(cts: ClassTopic[]): Warning[] {
     if (a.length < 2 || b.length < 2) continue;
     const drop = mean(b) - mean(a);
     const se = Math.sqrt(variance(a) / a.length + variance(b) / b.length);
-    const lo = drop - 1.96 * se, hi = drop + 1.96 * se;
+    const q = t95(Math.min(a.length, b.length) - 1); // conservative Welch df
+    const lo = drop - q * se, hi = drop + q * se;
     if (drop <= -4 && hi < 0) {
       const c = list[0];
       out.push({ key, district: c.district, school: c.school, cls: c.cls, textbook: c.textbook, first: Math.round(mean(a) * 10) / 10, second: Math.round(mean(b) * 10) / 10, drop: Math.round(drop * 10) / 10, lo: Math.round(lo * 10) / 10, hi: Math.round(hi * 10) / 10 });

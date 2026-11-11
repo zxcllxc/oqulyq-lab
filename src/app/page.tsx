@@ -459,7 +459,7 @@ export default function Home() {
                     return (
                       <div key={d.quarter} className="relative flex h-full flex-1 flex-col items-center">
                         <div className={`absolute w-full rounded-sm ${d.resid >= 0 ? "bg-good" : "bg-bad"}`} style={d.resid >= 0 ? { bottom: "50%", height: h } : { top: "50%", height: h }} />
-                        <span className="absolute font-mono text-xs tabular-nums" style={d.resid >= 0 ? { bottom: `calc(50% + ${h + 2}px)` } : { top: `calc(50% + ${h + 2}px)` }}>{fmt(d.resid)}</span>
+                        <span className="absolute font-mono text-xs tabular-nums" style={d.resid >= 0 ? { bottom: `calc(50% + ${h + 2}px)` } : { top: `calc(50% + ${h + 2}px)` }}>{d.n ? fmt(d.resid) : "—"}</span>
                       </div>
                     );
                   })}
@@ -509,6 +509,7 @@ export default function Home() {
                 <p className="mt-1 font-mono">{quality.ok} / {quality.total} {t.accepted}</p>
                 {Object.entries(quality.rejected).filter(([, n]) => n > 0).map(([k, n]) => <p key={k} className="font-mono text-bad">{t.rejectedRows}: {n} — {t.reasons[k as keyof typeof t.reasons]}</p>)}
                 {quality.noBaseline && <p className="mt-1 text-bad">{t.noBaseline}</p>}
+                {!quality.noBaseline && quality.imputedBaseline > 0 && <p className="mt-1 text-bad">{t.imputed(quality.imputedBaseline)}</p>}
               </div>
             )}
             <div className="mt-4 flex flex-wrap gap-2">
