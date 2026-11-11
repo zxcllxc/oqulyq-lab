@@ -47,7 +47,13 @@ export default function Home() {
   const [aiExplain, setAiExplain] = useState<{ status: "idle" | "loading" | "ai" | "off" | "limit"; text?: string }>({ status: "idle" });
   const [aiAsk, setAiAsk] = useState<{ status: "idle" | "loading" | "ai" | "off" | "limit"; text?: string }>({ status: "idle" });
   // AI explains facts computed by code; on any refusal (no credit, limit, ungrounded number) the template stays
+  // ask once whether AI has credit; when it is off, no POST is sent at all (no red errors in the console)
+  const [aiOn, setAiOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    fetch("/api/ai/status").then((r) => r.json()).then((j) => setAiOn(!!j.ai)).catch(() => setAiOn(false));
+  }, []);
   async function callAi(mode: "explain" | "ask", fs: { id: string; text: string }[], question = ""): Promise<{ status: "ai" | "off" | "limit"; text?: string }> {
+    if (!aiOn) return { status: "off" };
     try {
       const r = await fetch("/api/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode, lang, question, facts: fs.map(({ id, text }) => ({ id, text })) }) });
       const j = await r.json();
@@ -65,6 +71,7 @@ export default function Home() {
   const smart = useMemo(() => (rawImport ? smartMap(rawImport, overrides, aiHints) : null), [rawImport, overrides, aiHints]);
   async function askAiColumns() {
     if (!smart || !rawImport) return;
+    if (!aiOn) { setAiMapStatus("off"); return; }
     setAiMapStatus("loading");
     const unknown = smart.mapping.filter((m) => m.field == null).map((m) => ({ column: m.column, kind: rawImport.filter((r) => r[m.column] !== "" && Number.isFinite(Number(String(r[m.column]).replace(",", ".")))).length > rawImport.length * 0.6 ? "number" : "text" }));
     try {

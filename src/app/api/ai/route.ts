@@ -28,7 +28,7 @@ export async function POST(req: Request) {
   const ok = limit(ip);
   if (ok !== "ok") return reply({ fallback: true, reason: ok === "ip" ? "rate_ip" : "rate_day" }, 429);
   // no credentials at all (local dev without key): skip the network call
-  if (!process.env.VERCEL_OIDC_TOKEN && !process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL) return reply({ fallback: true, reason: "ai_off" }, 503);
+  if (!process.env.VERCEL_OIDC_TOKEN && !process.env.AI_GATEWAY_API_KEY && !process.env.VERCEL) return reply({ fallback: true, reason: "ai_off" });
 
   try {
     if (mode === "map") {
@@ -44,12 +44,13 @@ export async function POST(req: Request) {
       abortSignal: AbortSignal.timeout(15_000),
     });
     const g = numbersGrounded(text, facts);
-    if (!g.ok) return reply({ fallback: true, reason: "ungrounded", stray: g.stray.slice(0, 5) }, 422);
-    if (!citationsValid(text, facts)) return reply({ fallback: true, reason: "bad_citations" }, 422);
+    // soft refusals answer 200: the client shows the template, and the browser console stays clean
+    if (!g.ok) return reply({ fallback: true, reason: "ungrounded", stray: g.stray.slice(0, 5) });
+    if (!citationsValid(text, facts)) return reply({ fallback: true, reason: "bad_citations" });
     return reply({ text, model: MODEL });
   } catch (e) {
     const msg = String((e as Error)?.message ?? e);
     // most common: gateway has no credit / card not on file → client falls back to templates
-    return reply({ fallback: true, reason: /credit|card|verification|payment|quota/i.test(msg) ? "ai_off" : "error" }, 503);
+    return reply({ fallback: true, reason: /credit|card|verification|payment|quota/i.test(msg) ? "ai_off" : "error" });
   }
 }
