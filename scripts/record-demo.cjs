@@ -1,10 +1,11 @@
 'use strict';
-// Oqulyq Lab demo recorder (ui-demo skill). Uses an existing playwright install via PW_PATH.
+// Oqulyq Lab demo recorder (ui-demo skill). Usage:
+//   PW_PATH=<path to node_modules/playwright> OUT_DIR=<dir> node scripts/record-demo.cjs [--rehearse]
 const { chromium } = require(process.env.PW_PATH);
 const path = require('path');
 const fs = require('fs');
 
-const BASE_URL = 'http://localhost:3100';
+const BASE_URL = process.env.BASE_URL || 'http://localhost:3100';
 const OUT_DIR = process.env.OUT_DIR;
 const REHEARSAL = process.argv.includes('--rehearse');
 
@@ -33,102 +34,99 @@ async function showSubtitle(page, t) {
   if (t) await page.waitForTimeout(700);
 }
 async function moveAndClick(page, locator, label, postClickDelay = 900) {
-  const el = typeof locator === 'string' ? page.locator(locator).first() : locator;
+  const el = typeof locator === 'string' ? page.locator(locator).first() : locator.first();
   if (!(await el.isVisible().catch(() => false))) { console.error(`WARNING: not visible "${label}"`); return false; }
   await el.scrollIntoViewIfNeeded();
   await page.waitForTimeout(250);
   const box = await el.boundingBox();
-  if (box) { await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 12 }); await page.waitForTimeout(350); }
+  if (box) { await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 12 }); await page.waitForTimeout(300); }
   await el.click();
   await page.waitForTimeout(postClickDelay);
   return true;
 }
-async function smoothScroll(page, top, wait = 1600) {
+async function smoothScroll(page, top, wait = 1500) {
   await page.evaluate((y) => window.scrollTo({ top: y, behavior: 'smooth' }), top);
   await page.waitForTimeout(wait);
 }
-const tab = (page, name) => page.locator('nav button', { hasText: name }).first();
+const tab = (page, name) => page.locator('nav button', { hasText: name });
+const PASTE = ['Школа\tКласс\tУчебник\tФИО\tИтог прошлого года\tДроби\tФункция']
+  .concat(Array.from({ length: 36 }, (_, i) => {
+    const s = Math.floor(i / 6), k = i % 6;
+    return [k ? '' : `Школа ${s + 1}`, k ? '' : '7А', k ? '' : ['А', 'Б', 'В'][s % 3], `Ученик ${s}-${k}`, 50 + s * 3, 40 + ((s * 7 + k) % 30), 55 + ((s * 3 + k) % 25)].join('\t');
+  })).join('\n');
 
 (async () => {
   const browser = await chromium.launch({ headless: true });
-  if (REHEARSAL) {
-    const page = await (await browser.newContext({ viewport: { width: 1280, height: 720 } })).newPage();
-    await page.goto(BASE_URL);
-    let ok = true;
-    for (const [label, loc] of [
-      ['tab Учебники', tab(page, 'Учебники')], ['tab Часы', tab(page, 'Часы')], ['tab Задания', tab(page, 'Задания')],
-      ['tab Динамика', tab(page, 'Динамика')], ['role select', page.locator('select[aria-label="Я —"]')],
-      ['lang KZ', page.locator('button', { hasText: 'Қаз' })], ['KTP button', page.locator('button', { hasText: 'КТП' })],
-    ]) {
-      const v = await loc.first().isVisible().catch(() => false);
-      // КТП lives on the Часы tab
-      if (!v && label === 'KTP button') { await tab(page, 'Часы').click(); }
-      const v2 = v || (await loc.first().isVisible().catch(() => false));
-      console.log(`${v2 ? 'REHEARSAL OK' : 'REHEARSAL FAIL'}: ${label}`);
-      ok = ok && v2;
-    }
-    await browser.close();
-    process.exit(ok ? 0 : 1);
-  }
-
-  const context = await browser.newContext({ recordVideo: { dir: OUT_DIR, size: { width: 1280, height: 720 } }, viewport: { width: 1280, height: 720 }, colorScheme: 'light' });
+  const ctxOpts = { viewport: { width: 1280, height: 720 }, colorScheme: 'light' };
+  const context = await browser.newContext(REHEARSAL ? ctxOpts : { ...ctxOpts, recordVideo: { dir: OUT_DIR, size: { width: 1280, height: 720 } } });
   const page = await context.newPage();
+  let ok = true;
   try {
     await page.goto(BASE_URL);
-    await page.evaluate(() => { try { localStorage.setItem('oq-theme', 'light'); localStorage.setItem('oq-lang', 'ru'); } catch {} });
+    await page.evaluate(() => { try { localStorage.setItem('oq-theme', 'light'); localStorage.setItem('oq-lang', 'ru'); localStorage.removeItem('oq-welcomed'); } catch {} });
     await page.reload();
-    await page.waitForTimeout(800);
+    await page.waitForTimeout(900);
     await injectCursor(page); await injectSubtitleBar(page);
 
-    await showSubtitle(page, '1 — Обзор: 54 школы, 23 120 результатов, главные выводы');
-    await page.mouse.move(640, 360, { steps: 8 });
-    await page.waitForTimeout(1500);
-    await smoothScroll(page, 330, 2600);
-    await smoothScroll(page, 0, 800);
+    await showSubtitle(page, '1 — Кто вы? Методист выбирает роль');
+    await page.waitForTimeout(900);
+    ok = (await moveAndClick(page, page.locator('[role=dialog] button', { hasText: 'Методист области' }), 'role region', 900)) && ok;
 
-    await showSubtitle(page, '2 — Учебники: по среднему В «лучше», честно — разницы нет');
-    await moveAndClick(page, tab(page, 'Учебники'), 'Учебники', 1200);
-    await page.mouse.move(700, 470, { steps: 12 });
-    await page.waitForTimeout(3200);
-    await smoothScroll(page, 520, 2600);
-
-    await showSubtitle(page, '3 — Часы: 5 часов в трудные темы, у каждой строки «почему»');
-    await smoothScroll(page, 0, 500);
-    await moveAndClick(page, tab(page, 'Часы'), 'Часы', 1200);
-    await page.mouse.move(900, 450, { steps: 12 });
+    await showSubtitle(page, '2 — Обзор: главное и «спроси данные»');
+    await smoothScroll(page, 300, 1400);
+    const ask = page.locator('input[name=ask]');
+    await ask.scrollIntoViewIfNeeded();
+    ok = (await moveAndClick(page, ask, 'ask', 200)) && ok;
+    await ask.pressSequentially('Какой учебник слабее?', { delay: 35 });
+    await page.keyboard.press('Enter');
     await page.waitForTimeout(2600);
-    await moveAndClick(page, page.locator('button', { hasText: 'КТП' }), 'КТП', 1200);
 
-    await showSubtitle(page, '4 — Задания СОР: вопрос 7 не работает, вопрос 5 — ловушка');
-    await moveAndClick(page, tab(page, 'Задания'), 'Задания', 1200);
-    await page.mouse.move(700, 520, { steps: 12 });
-    await page.waitForTimeout(3000);
+    await showSubtitle(page, '3 — Учебники: где причина — класс, учебник или часы');
+    await smoothScroll(page, 0, 500);
+    ok = (await moveAndClick(page, tab(page, 'Учебники'), 'tab books', 1200)) && ok;
+    await page.mouse.move(700, 450, { steps: 10 });
+    await page.waitForTimeout(2600);
+    await smoothScroll(page, 900, 2200);
 
-    await showSubtitle(page, '5 — Раннее предупреждение: классы, которые просели');
-    await moveAndClick(page, tab(page, 'Динамика'), 'Динамика', 1000);
-    await smoothScroll(page, 420, 2800);
+    await showSubtitle(page, '4 — Часы: план 102 ч, «что если» по данным, план методиста');
+    await smoothScroll(page, 0, 500);
+    ok = (await moveAndClick(page, tab(page, 'Часы'), 'tab hours', 1000)) && ok;
+    ok = (await moveAndClick(page, page.locator('button', { hasText: 'План методиста' }), 'plan', 1800)) && ok;
 
-    await showSubtitle(page, '6 — Роль: методист района видит свой срез');
-    await smoothScroll(page, 0, 600);
-    await moveAndClick(page, page.locator('select[aria-label="Я —"]'), 'role', 300);
-    await page.locator('select[aria-label="Я —"]').selectOption('district');
+    await showSubtitle(page, '5 — Обоснование: школы, сменившие учебник');
+    ok = (await moveAndClick(page, tab(page, 'Обоснование'), 'tab justification', 1200)) && ok;
+    await page.mouse.move(600, 500, { steps: 10 });
+    await page.waitForTimeout(2400);
+
+    await showSubtitle(page, '6 — «Объясни мне»: цифры считает код, текст объясняет');
+    ok = (await moveAndClick(page, page.locator('button:visible', { hasText: 'Объясни мне' }), 'explain', 2800)) && ok;
+    await page.locator('aside[role=dialog] button', { hasText: 'Закрыть' }).first().click();
+    await page.waitForTimeout(500);
+    await showSubtitle(page, '7 — Умный импорт: кривая ведомость, ФИО кодируются');
+    ok = (await moveAndClick(page, tab(page, 'Данные'), 'tab data', 900)) && ok;
+    const ta = page.locator('textarea[name=paste]');
+    await ta.scrollIntoViewIfNeeded();
+    await ta.fill(PASTE);
     await page.waitForTimeout(600);
-    await page.locator('select[aria-label="scope"]').selectOption({ index: 1 });
-    await moveAndClick(page, tab(page, 'Обзор'), 'Обзор', 2200);
+    ok = (await moveAndClick(page, page.locator('button', { hasText: 'Разобрать вставленное' }), 'parse', 1800)) && ok;
+    await page.mouse.move(400, 450, { steps: 10 });
+    await page.waitForTimeout(1500);
+    ok = (await moveAndClick(page, page.locator('button', { hasText: /^Загрузить \d+ строк/ }), 'load', 1600)) && ok;
 
-    await showSubtitle(page, '7 — Қазақ тілінде де');
-    await moveAndClick(page, page.locator('button', { hasText: 'Қаз' }), 'Қаз', 2400);
     await showSubtitle(page, 'Oqulyq Lab — решения об учебниках и часах по данным');
-    await page.waitForTimeout(2500);
+    await page.waitForTimeout(2200);
   } catch (err) {
     console.error('DEMO ERROR:', err.message);
-    process.exitCode = 1;
+    ok = false;
   } finally {
     await context.close();
-    const src = await page.video().path();
-    const dest = path.join(OUT_DIR, 'oqulyq-demo.webm');
-    fs.renameSync(src, dest); // overwrite the stable name, no stray page@<hash>.webm left behind
-    console.log('Video saved:', dest);
+    if (!REHEARSAL) {
+      const src = await page.video().path();
+      fs.renameSync(src, path.join(OUT_DIR, 'oqulyq-demo.webm'));
+      console.log('Video saved');
+    }
     await browser.close();
+    console.log(ok ? 'ALL STEPS OK' : 'SOME STEPS FAILED');
+    process.exitCode = ok ? 0 : 1;
   }
 })();

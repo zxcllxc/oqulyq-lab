@@ -40,3 +40,10 @@ test("plan contains the term plan, correction plan and meeting agenda", () => {
   assert.match(p, /План коррекции/);
   assert.match(p, /Повестка методобъединения/);
 });
+
+test("explain does not claim 'similar textbooks' when there is too little data", () => {
+  const few = buildFacts({ ...input, overall: input.overall.map((o) => ({ ...o, verdict: "few" as const, k: 2 })) });
+  const ex = explainTemplate(few);
+  assert.ok(ex.summary.some((x) => /данных пока мало/.test(x.text)));
+  assert.ok(!ex.summary.some((x) => /похожий результат/.test(x.text)));
+});
