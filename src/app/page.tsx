@@ -883,6 +883,7 @@ export default function Home() {
               <button onClick={downloadTemplate} className="rounded-full border border-ink px-4 py-1.5 text-sm hover:bg-ink hover:text-paper">{t.template}</button>
               {!isDemo && <button onClick={() => { setRows(DEMO.rows); setResponses(DEMO.responses); setHours(DEMO_HOURS); setIsDemo(true); setQuality(null); }} className="rounded-full px-4 py-1.5 text-sm hover:bg-line">{t.reset}</button>}
               <a href="/api" className="rounded-full px-4 py-1.5 text-sm text-accent underline underline-offset-2">{t.api} →</a>
+              <a href="/how" className="rounded-full px-4 py-1.5 text-sm text-accent underline underline-offset-2">{t.howLink} →</a>
             </div>
           </div>
           <div>
