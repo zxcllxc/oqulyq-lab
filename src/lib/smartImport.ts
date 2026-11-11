@@ -37,13 +37,15 @@ function coder() {
   };
 }
 
-export function smartMap(raw: Record<string, unknown>[], overrides: Record<string, Mapping["field"]> = {}): SmartResult {
+export function smartMap(raw: Record<string, unknown>[], overrides: Record<string, Mapping["field"]> = {}, hints: Record<string, Mapping["field"]> = {}): SmartResult {
   const columns = [...new Set(raw.flatMap((r) => Object.keys(r)))].filter((c) => !/^__EMPTY/.test(c) || raw.some((r) => r[c] != null && r[c] !== ""));
   const mapping: Mapping[] = columns.map((column) => {
     const f = guess(column);
     return { column, field: f, sure: f != null };
   });
   const has = (f: Field) => mapping.some((m) => m.field === f);
+  // AI hints fill only columns the rules did not recognise, and stay "check" (unsure)
+  for (const m of mapping) if (m.field == null && hints[m.column]) { m.field = hints[m.column]; m.sure = false; }
   const applyOverrides = () => { for (const m of mapping) if (m.column in overrides) { m.field = overrides[m.column]; m.sure = true; } };
   applyOverrides();
   // wide journal: no topic/score columns, but several numeric unmapped columns → each such column is a topic

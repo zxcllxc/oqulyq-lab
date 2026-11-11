@@ -41,3 +41,14 @@ test("rate limiter: per-IP per minute and daily ceiling", () => {
   for (let i = 0; i < LIMITS.perDay + 5; i++) last = lim2(`ip${i}`);
   assert.equal(last, "day");
 });
+
+test("AI column mapping: only headers go out; reply parsed strictly", async () => {
+  const { sanitizeColumns, mapPrompt, parseMapping } = await import("../src/lib/aiGuard");
+  const cols = sanitizeColumns([{ column: "Оқушы аты", kind: "text" }, { column: "Жиынтық", kind: "number" }, { nope: 1 }]);
+  assert.equal(cols.length, 2);
+  const p = mapPrompt(cols);
+  assert.ok(p.includes("Жиынтық") && !p.includes("Иванов"));
+  const m = parseMapping('Ответ: {"Оқушы аты":"student","Жиынтық":"score","Чужая":"school","Жиынтық2":"rm -rf"}', cols);
+  assert.deepEqual(m, { "Оқушы аты": "student", "Жиынтық": "score" });
+  assert.deepEqual(parseMapping("не JSON", cols), {});
+});

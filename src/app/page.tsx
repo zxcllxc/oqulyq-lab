@@ -59,7 +59,19 @@ export default function Home() {
   const [rawImport, setRawImport] = useState<Record<string, unknown>[] | null>(null);
   const [overrides, setOverrides] = useState<Record<string, Mapping["field"]>>({});
   const [pasted, setPasted] = useState("");
-  const smart = useMemo(() => (rawImport ? smartMap(rawImport, overrides) : null), [rawImport, overrides]);
+  const [aiHints, setAiHints] = useState<Record<string, Mapping["field"]>>({});
+  const [aiMapStatus, setAiMapStatus] = useState<"idle" | "loading" | "done" | "off">("idle");
+  const smart = useMemo(() => (rawImport ? smartMap(rawImport, overrides, aiHints) : null), [rawImport, overrides, aiHints]);
+  async function askAiColumns() {
+    if (!smart || !rawImport) return;
+    setAiMapStatus("loading");
+    const unknown = smart.mapping.filter((m) => m.field == null).map((m) => ({ column: m.column, kind: rawImport.filter((r) => r[m.column] !== "" && Number.isFinite(Number(String(r[m.column]).replace(",", ".")))).length > rawImport.length * 0.6 ? "number" : "text" }));
+    try {
+      const r = await fetch("/api/ai", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ mode: "map", columns: unknown }) });
+      const j = await r.json();
+      if (r.ok && j.mapping) { setAiHints(j.mapping); setAiMapStatus("done"); } else setAiMapStatus("off");
+    } catch { setAiMapStatus("off"); }
+  }
   const t = T[lang];
   const show = (i: number) => tab === i || all;
   const label = (topic: string) => (lang === "kk" ? TOPIC_BY_NAME[topic]?.kk : lang === "en" ? TOPIC_BY_NAME[topic]?.en : undefined) || topic;
@@ -177,6 +189,8 @@ export default function Home() {
       const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
       if (!json.length) throw new Error("empty");
       setOverrides({});
+      setAiHints({});
+      setAiMapStatus("idle");
       setRawImport(json);
     } catch {
       setErr(t.err);
@@ -190,6 +204,8 @@ export default function Home() {
       const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(wb.Sheets[wb.SheetNames[0]], { defval: "" });
       if (!json.length) throw new Error("empty");
       setOverrides({});
+      setAiHints({});
+      setAiMapStatus("idle");
       setRawImport(json);
     } catch {
       setErr(t.err);
@@ -839,6 +855,12 @@ export default function Home() {
                 </div>
                 <p className="mt-2 font-mono text-xs">{t.smartStats(smart.records.length, smart.filled, smart.anonymized, smart.wide)}</p>
                 {smart.missing.length > 0 && <p className="mt-1 text-sm text-bad">{t.missingF(smart.missing.map((f) => t.fields[f]).join(", "))}</p>}
+                {smart.mapping.some((m) => m.field == null) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                    <button onClick={askAiColumns} disabled={aiMapStatus === "loading"} className="rounded-full border border-accent px-3 py-1 text-accent hover:bg-accent hover:text-paper disabled:opacity-50">{t.aiColumns}</button>
+                    <span className="font-mono text-[11px] text-muted">{aiMapStatus === "loading" ? t.aiLoading : aiMapStatus === "off" ? t.aiOff : aiMapStatus === "done" ? t.aiColumnsDone : t.aiColumnsNote}</span>
+                  </div>
+                )}
                 <div className="mt-3 flex flex-wrap gap-2">
                   <button onClick={confirmImport} disabled={smart.missing.length > 0} className="rounded-full bg-ink px-4 py-1.5 text-sm text-paper disabled:opacity-40">{t.load(smart.records.length)}</button>
                   <button onClick={() => setRawImport(null)} className="rounded-full px-4 py-1.5 text-sm hover:bg-line">{t.cancel}</button>
