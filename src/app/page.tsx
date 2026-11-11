@@ -128,7 +128,8 @@ export default function Home() {
   const causes = a.stats.map((st) => whereIsCause(view.cts, a.eff.cells, st.topic, st.mean));
   const factInput = { stats: a.stats, overall: a.eff.overall, cells: a.eff.cells, recs: a.recs, items: a.items, warns: a.warns, did: w.did, label, fmt };
   const facts = buildFacts(factInput);
-  const tabFacts = tab === 0 ? facts : facts.filter((f) => f.tab === tab);
+  const ownFacts = facts.filter((f) => f.tab === tab);
+  const tabFacts = tab === 0 || ownFacts.length === 0 ? facts : ownFacts; // a tab without its own facts gets the overall picture
   const explained = explainTemplate(tabFacts);
   const goFact = (id: string) => { const f = facts.find((x) => x.id === id); if (f) { setTab(f.tab); setExplainOpen(false); window.scrollTo({ top: 0 }); } };
   const RefChip = ({ id }: { id: string }) => <button onClick={() => goFact(id)} className="ml-1 rounded-sm border border-accent px-1 font-mono text-[11px] text-accent hover:bg-accent hover:text-paper">{id}</button>;
@@ -297,8 +298,9 @@ export default function Home() {
         <span className="mx-2 h-5 w-px shrink-0 bg-line" />
         <span className="mr-1 shrink-0 font-mono text-[11px] uppercase tracking-wider text-muted">{t.groups[1]}</span>
         {[3, 4, 5].map(tabBtn)}
-        <button onClick={() => setExplainOpen(true)} className="ml-auto shrink-0 rounded-full bg-accent px-4 py-1.5 text-sm text-paper">{t.explainBtn}</button>
+        <button onClick={() => setExplainOpen(true)} className="ml-auto hidden shrink-0 rounded-full bg-accent px-4 py-1.5 text-sm text-paper sm:inline-block">{t.explainBtn}</button>
       </nav>
+      <button onClick={() => setExplainOpen(true)} className="print:hidden fixed right-4 bottom-4 z-30 rounded-full bg-accent px-5 py-3 text-sm text-paper shadow-lg sm:hidden">{t.explainBtn}</button>
       {explainOpen && (
         <div className="print:hidden fixed inset-0 z-40 flex justify-end bg-ink/30" onClick={() => setExplainOpen(false)}>
           <aside role="dialog" aria-modal="true" aria-label={t.explainTitle} onClick={(e) => e.stopPropagation()} className="h-full w-full max-w-md overflow-y-auto bg-paper p-5 shadow-xl">
